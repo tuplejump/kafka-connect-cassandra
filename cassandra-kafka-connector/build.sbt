@@ -1,8 +1,10 @@
 name := "cassandra-kafka-connector"
 
-version := "0.0.1"
+version := "0.0.2"
 
-scalaVersion := "2.11.7"
+scalaVersion := "2.10.5"
+
+organization := "com.tuplejump"
 
 libraryDependencies ++= Seq("org.apache.kafka" % "connect-api" % "0.9.0.0",
   "com.datastax.cassandra" % "cassandra-driver-core" % "2.1.9",
@@ -22,6 +24,7 @@ cassandraCqlInit := "src/test/resources/setup.cql"
 
 lazy val root = (project in file(".")).enablePlugins(BuildInfoPlugin).settings(
   buildInfoKeys := Seq[BuildInfoKey](version),
-  buildInfoPackage := "com.tuplejump.kafka.connector.cassandra"
+  buildInfoPackage := "com.tuplejump.kafka.connector",
+  buildInfoObject := "CassandraConnectorInfo"
 )
 
