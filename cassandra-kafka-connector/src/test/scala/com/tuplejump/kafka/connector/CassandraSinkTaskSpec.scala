@@ -16,7 +16,7 @@
  * limitations under the License.
  *
  */
-package com.tuplejump.kafka.connector.cassandra
+package com.tuplejump.kafka.connector
 
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
@@ -39,20 +39,23 @@ class CassandraSinkTaskSpec extends FlatSpec with Matchers with MockitoSugar {
   }
 
   it should "save records in cassandra" in {
+    val topicName = "test_kv_topic"
+    val tableName = "test.kv"
+
     val sinkTask = new CassandraSinkTask()
     val mockContext = mock[SinkTaskContext]
 
     sinkTask.initialize(mockContext)
-    sinkTask.start(Map.empty[String, String])
+    sinkTask.start(Map("host" -> "localhost", topicName + "_table" -> tableName))
     val valueSchema = SchemaBuilder.struct.name("record").version(1)
       .field("key", Schema.STRING_SCHEMA)
       .field("value", Schema.INT32_SCHEMA).build
     val value1 = new Struct(valueSchema).put("key", "pqr").put("value", 15)
     val value2 = new Struct(valueSchema).put("key", "abc").put("value", 17)
 
-    val TopicName = "test.kv"
-    val record1 = new SinkRecord(TopicName, 1, null, null, valueSchema, value1, 0)
-    val record2 = new SinkRecord(TopicName, 1, null, null, valueSchema, value2, 0)
+
+    val record1 = new SinkRecord(topicName, 1, null, null, valueSchema, value1, 0)
+    val record2 = new SinkRecord(topicName, 1, null, null, valueSchema, value2, 0)
 
     sinkTask.put(List(record1, record2).asJavaCollection)
 
@@ -60,7 +63,7 @@ class CassandraSinkTaskSpec extends FlatSpec with Matchers with MockitoSugar {
 
     val cluster = Cluster.builder().addContactPoint("localhost").build()
     val session = cluster.connect()
-    val result = session.execute(s"select count(1) from ${TopicName}").one()
+    val result = session.execute(s"select count(1) from ${tableName}").one()
     val rowCount = result.getLong(0)
     rowCount should be(2)
   }

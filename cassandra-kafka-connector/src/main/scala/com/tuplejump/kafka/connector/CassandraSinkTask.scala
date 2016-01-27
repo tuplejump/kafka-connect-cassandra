@@ -16,20 +16,23 @@
  * limitations under the License.
  *
  */
-package com.tuplejump.kafka.connector.cassandra
+package com.tuplejump.kafka.connector
 
-import java.util.{Map => JMap, Collection => JCollection}
+import java.util.{Collection => JCollection, Map => JMap, Date}
 
 import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import com.datastax.driver.core.{Cluster, Session}
 import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.connect.data.Schema.Type._
-import org.apache.kafka.connect.data.{Schema, Struct}
+import org.apache.kafka.connect.data.{Timestamp, Schema, Struct}
 import org.apache.kafka.connect.sink.{SinkRecord, SinkTask}
+import com.tuplejump.kafka.connector.CassandraConnectorConfig._
 
 class CassandraSinkTask extends SinkTask {
   private var maybeSession: Option[Session] = None
+  private var configProperties: JMap[String, String] = Map.empty[String, String].asJava
 
   def getSession = maybeSession
 
@@ -38,11 +41,15 @@ class CassandraSinkTask extends SinkTask {
   }
 
   override def put(records: JCollection[SinkRecord]): Unit = {
-    val session = maybeSession.get
-    records.foreach {
-      r =>
-        val query = DataConverter.sinkRecordToQuery(r)
-        session.execute(query)
+    maybeSession match {
+      case Some(session) =>
+        records.foreach {
+          r =>
+            val query = DataConverter.sinkRecordToQuery(r, configProperties)
+            session.execute(query)
+        }
+      case None =>
+        throw new CassandraConnectorException("Failed to get cassandra session.")
     }
   }
 
@@ -50,31 +57,43 @@ class CassandraSinkTask extends SinkTask {
   override def flush(offsets: JMap[TopicPartition, OffsetAndMetadata]): Unit = {}
 
   override def start(props: JMap[String, String]): Unit = {
-    val host = props.getOrDefault("host", "localhost")
-    val port = props.getOrDefault("port", "9042").toInt
+    configProperties = props
+    val host = configProperties.getOrDefault(HostConfig, DefaultHost)
+    val port = configProperties.getOrDefault(PortConfig, DefaultPort).toInt
     val cluster = Cluster.builder().addContactPoint(host).withPort(port)
     maybeSession = Some(cluster.build().connect())
   }
 
-  override def version(): String = BuildInfo.version
+  override def version(): String = CassandraConnectorInfo.version
 }
 
 object DataConverter {
 
   //TODO use keySchema, partition and kafkaOffset
-  def sinkRecordToQuery(sinkRecord: SinkRecord): String = {
+  def sinkRecordToQuery(sinkRecord: SinkRecord, props: JMap[String, String]): String = {
     val valueSchema = sinkRecord.valueSchema()
-    val columnNames = valueSchema.fields().map(_.name())
+    val columnNames = valueSchema.fields().map(_.name()).distinct
+
+    val keyName = tableConfig(sinkRecord.topic())
+    val tableName = props.get(keyName)
     val columnValueString = valueSchema.`type`() match {
       case STRUCT =>
         val result: Struct = sinkRecord.value().asInstanceOf[Struct]
         columnNames.map { col =>
           val colValue = result.get(col).toString
-          if (valueSchema.field(col).schema() == Schema.STRING_SCHEMA) {
-            s"'$colValue'"
-          } else colValue
+          val colSchema = valueSchema.field(col).schema()
+          //TODO ensure all types are supported
+          colSchema match {
+            case x if x.`type`() == Schema.STRING_SCHEMA.`type`() =>
+              s"'$colValue'"
+            case x if x.name() == Timestamp.LOGICAL_NAME =>
+              val time = Timestamp.fromLogical(x, result.get(col).asInstanceOf[Date])
+              s"$time"
+            case y =>
+              colValue
+          }
         }.mkString(",")
     }
-    s"INSERT INTO ${sinkRecord.topic()}(${columnNames.mkString(",")}) VALUES(${columnValueString})"
+    s"INSERT INTO $tableName(${columnNames.mkString(",")}) VALUES($columnValueString)"
   }
 }
