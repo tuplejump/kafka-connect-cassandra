@@ -16,20 +16,22 @@
  * limitations under the License.
  *
  */
-package com.tuplejump.kafka.connector.cassandra
+package com.tuplejump.kafka.connector
 
+import scala.collection.JavaConversions._
 import org.apache.kafka.connect.data.{Schema, SchemaBuilder, Struct}
 import org.apache.kafka.connect.sink.SinkRecord
 import org.scalatest.{FlatSpec, Matchers}
 
 class DataConverterSpec extends FlatSpec with Matchers {
 
+
   it should "convert a struct schema with single field" in {
     val valueSchema = SchemaBuilder.struct.name("record").version(1).field("id", Schema.INT32_SCHEMA).build
     val value = new Struct(valueSchema).put("id", 1)
     val record = new SinkRecord("test", 1, null, null, valueSchema, value, 0)
-    val result = DataConverter.sinkRecordToQuery(record)
-    result should be ("INSERT INTO test(id) VALUES(1)")
+    val result = DataConverter.sinkRecordToQuery(record, Map("test_table" -> "test.t1"))
+    result should be("INSERT INTO test.t1(id) VALUES(1)")
   }
 
   it should "convert a struct schema with multiple fields" in {
@@ -38,9 +40,9 @@ class DataConverterSpec extends FlatSpec with Matchers {
       .field("name", Schema.STRING_SCHEMA)
       .field("age", Schema.INT32_SCHEMA).build
 
-    val value = new Struct(valueSchema).put("name", "user").put("available",false).put("age",15)
-    val record = new SinkRecord("test.kfk", 1, null, null, valueSchema, value, 0)
-    val result = DataConverter.sinkRecordToQuery(record)
+    val value = new Struct(valueSchema).put("name", "user").put("available", false).put("age", 15)
+    val record = new SinkRecord("test_kfk", 1, null, null, valueSchema, value, 0)
+    val result = DataConverter.sinkRecordToQuery(record, Map("test_kfk_table" -> "test.kfk"))
     result should be("INSERT INTO test.kfk(available,name,age) VALUES(false,'user',15)")
   }
 }
