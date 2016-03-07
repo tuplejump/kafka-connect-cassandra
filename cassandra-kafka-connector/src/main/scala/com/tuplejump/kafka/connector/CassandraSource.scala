@@ -24,47 +24,32 @@ import java.util.{List => JList, Map => JMap}
 import scala.collection.JavaConverters._
 import org.apache.kafka.connect.connector.Task
 import org.apache.kafka.connect.errors.ConnectException
-import org.apache.kafka.connect.sink.SinkConnector
-import CassandraConnectorConfig._
+import org.apache.kafka.connect.source.SourceConnector
 
-class CassandraSink extends SinkConnector with Logging{
-
+class CassandraSource extends SourceConnector with Logging{
   private var configProperties = Map.empty[String, String].asJava
 
-  override val taskClass: Class[_ <: Task] = classOf[CassandraSinkTask]
+  override val taskClass: Class[_ <: Task] = classOf[CassandraSourceTask]
 
-  override def taskConfigs(maxTasks: Int): JList[JMap[String, String]] = {
-    List.fill(maxTasks)(configProperties).asJava
-  }
+  override def taskConfigs(maxTasks: Int): JList[JMap[String, String]] = List.fill(maxTasks)(configProperties).asJava
 
   override def stop(): Unit = {
-    logger.warn("Kafka-Cassandra Sink Connector is being stopped")
+    logger.warn("Kafka-Cassandra Source Connector is being stopped")
   }
 
   override def start(props: JMap[String, String]): Unit = {
     if (isValidConfig(props.asScala.toMap)) {
       configProperties = props
     } else {
-      throw new ConnectException(
-        s"""Couldn't start CassandraSink due to configuration error.`topics` property cannot be empty and
-            |there should be a `<topicName>_table` key whose value is `<keyspace>.<tableName>` for every topic.""".stripMargin)
+      throw new ConnectException("Couldn't start CassandraSource due to configuration error.")
     }
   }
 
   override def version(): String = CassandraConnectorInfo.version
 
-  private def isValidConfig(config: Map[String, String]): Boolean = {
-    CassandraConnectorConfig.isValidValue(config,
-      SinkConnector.TOPICS_CONFIG, { topics =>
-        topics.nonEmpty && topics.split(TopicSeparator).forall {
-          topicName =>
-            val key = tableConfig(topicName)
-            CassandraConnectorConfig.isValidValue(config, key, {
-              tableName =>
-                tableName.split("\\.").length == 2
-            })
-        }
-      }
-    )
+  private def isValidConfig(props: Map[String, String]): Boolean = {
+    CassandraConnectorConfig.isValidValue(props,
+      CassandraConnectorConfig.Query, { x => x.nonEmpty })
   }
+
 }

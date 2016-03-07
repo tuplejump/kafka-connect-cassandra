@@ -18,7 +18,6 @@
  */
 package com.tuplejump.kafka.connector
 
-import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import com.datastax.driver.core.Cluster
 import org.apache.kafka.connect.data.{Schema, SchemaBuilder, Struct}
@@ -33,7 +32,7 @@ class CassandraSinkTaskSpec extends FlatSpec with Matchers with MockitoSugar {
     val mockContext = mock[SinkTaskContext]
 
     sinkTask.initialize(mockContext)
-    sinkTask.start(Map.empty[String, String])
+    sinkTask.start(Map.empty[String, String].asJava)
     sinkTask.getSession.isDefined should be(true)
     sinkTask.stop()
   }
@@ -46,7 +45,7 @@ class CassandraSinkTaskSpec extends FlatSpec with Matchers with MockitoSugar {
     val mockContext = mock[SinkTaskContext]
 
     sinkTask.initialize(mockContext)
-    sinkTask.start(Map("host" -> "localhost", topicName + "_table" -> tableName))
+    sinkTask.start(Map("host" -> "localhost", topicName + "_table" -> tableName).asJava)
     val valueSchema = SchemaBuilder.struct.name("record").version(1)
       .field("key", Schema.STRING_SCHEMA)
       .field("value", Schema.INT32_SCHEMA).build

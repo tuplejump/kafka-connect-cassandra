@@ -16,43 +16,52 @@
  * limitations under the License.
  *
  */
+
 package com.tuplejump.kafka.connector
 
-import java.util.{Collection => JCollection, Map => JMap}
+import java.util.{List => JList, Map => JMap, ArrayList=> JArrayList}
 
 import scala.collection.JavaConverters._
-import com.datastax.driver.core.{Cluster, Session}
-import org.apache.kafka.clients.consumer.OffsetAndMetadata
-import org.apache.kafka.common.TopicPartition
-import org.apache.kafka.connect.sink.{SinkRecord, SinkTask}
+import com.datastax.driver.core.{Row, Cluster, Session}
+import org.apache.kafka.connect.data.{Schema, Struct}
+import org.apache.kafka.connect.source.{SourceRecord, SourceTask}
 import com.tuplejump.kafka.connector.CassandraConnectorConfig._
 
-class CassandraSinkTask extends SinkTask {
+class CassandraSourceTask extends SourceTask {
   private var _session: Option[Session] = None
   private var configProperties: JMap[String, String] = Map.empty[String, String].asJava
 
   //This has been exposed to be used while testing only
   private[connector] def getSession = _session
 
+  //TODO figure out what should be sourcePartition and sourceOffset
+  /*From SourceTask it should be something like -Map("db" -> "database_name","table" -> "table_name").asJava*/
+  private var sourcePartition: JMap[String, String] = Map.empty[String, String].asJava
+
   override def stop(): Unit = {
     _session.map(_.getCluster.close())
   }
 
-  override def put(records: JCollection[SinkRecord]): Unit = {
+  //Initial implementation only supports bulk load for a query
+  override def poll(): JList[SourceRecord] = {
+    val query = configProperties.get(CassandraConnectorConfig.Query) //this property should be there. validation is done prior to starting a CassandraSource
+    var result: JList[SourceRecord] = new JArrayList[SourceRecord]()
     _session match {
       case Some(session) =>
-        records.asScala.foreach {
-          r =>
-            val query = DataConverter.sinkRecordToQuery(r, configProperties)
-            session.execute(query)
+        val resultSet = session.execute(query)
+        while (!resultSet.isExhausted) {
+          val row: Row = resultSet.one()
+          //TODO check if a task can query multiple tables
+          val schema: Schema = DataConverter.columnDefToSchema(row.getColumnDefinitions)
+          val valueStruct: Struct = DataConverter.rowToStruct(schema, row)
+          val sinkRecord = new SourceRecord(sourcePartition, null, configProperties.get("topic"), schema, valueStruct)
+          result.add(sinkRecord)
         }
+        result
       case None =>
         throw new CassandraConnectorException("Failed to get cassandra session.")
     }
   }
-
-  //This method is not relevant as we insert every received record in Cassandra
-  override def flush(offsets: JMap[TopicPartition, OffsetAndMetadata]): Unit = {}
 
   override def start(props: JMap[String, String]): Unit = {
     configProperties = props
