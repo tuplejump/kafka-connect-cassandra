@@ -1,8 +1,12 @@
 name := "kafka-connect-cassandra"
 
-version := "0.0.3"
+version := "0.0.4"
 
-scalaVersion := "2.10.5"
+crossScalaVersions := Seq("2.11.7", "2.10.6")
+
+crossVersion := CrossVersion.binary
+
+scalaVersion := sys.props.getOrElse("scala.version", crossScalaVersions.value.head)
 
 organization := "com.tuplejump"
 
