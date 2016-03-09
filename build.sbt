@@ -1,4 +1,4 @@
-name := "cassandra-kafka-connector"
+name := "kafka-connect-cassandra"
 
 version := "0.0.3"
 
