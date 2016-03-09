@@ -31,7 +31,6 @@ libraryDependencies ++= Seq(
 )
 
 import com.github.hochgi.sbt.cassandra._
-
 CassandraPlugin.cassandraSettings
 
 test in IntegrationTest <<= stopCassandra.dependsOn(test in IntegrationTest).dependsOn(startCassandra)
@@ -41,12 +40,52 @@ cassandraVersion := "2.2.2"
 
 cassandraCqlInit := "src/it/resources/setup.cql"
 
+
+lazy val testOptionsSettings = Tests.Argument(TestFrameworks.ScalaTest, "-oDF")
+
+lazy val testConfigSettings = inConfig(Test)(Defaults.testTasks) ++
+  inConfig(IntegrationTest)(Defaults.itSettings)
+
+lazy val testSettings = testConfigSettings ++ cassandraSettings ++ Seq(
+  fork in IntegrationTest := false,
+  parallelExecution in Test := false,
+  parallelExecution in IntegrationTest := false,
+  testOptions in Test += testOptionsSettings,
+  // default and stopCassandraAfterTests := true are not working
+  testOptions in IntegrationTest += Tests.Cleanup( () => {
+    val pid = cassandraPid.value
+    println(s"Shutting down cassandra pid[$pid]")
+    s"kill -9 $pid"!
+  }),
+  testOptions in IntegrationTest += testOptionsSettings,
+  (internalDependencyClasspath in IntegrationTest) <<= Classpaths.concat(
+    internalDependencyClasspath in IntegrationTest, exportedProducts in Test)
+)
+
 assemblyMergeStrategy in assembly := {
   case PathList("META-INF", "io.netty.versions.properties") => MergeStrategy.last
   case x =>
     val oldStrategy = (assemblyMergeStrategy in assembly).value
     oldStrategy(x)
 }
+
+pomExtra :=
+  <scm>
+    <url>git@github.com:tuplejump/kafka-connector.git</url>
+    <connection>scm:git:git@github.com:tuplejump/kafka-connector.git</connection>
+  </scm>
+    <developers>
+      <developer>
+        <id>Shiti</id>
+        <name>Shiti Saxena</name>
+        <url>https://twitter.com/eraoferrors</url>
+      </developer>
+      <developer>
+        <id>helena</id>
+        <name>Helena Edelson</name>
+        <url>https://twitter.com/helenaedelson</url>
+      </developer>
+    </developers>
 
 lazy val root = (project in file(".")).enablePlugins(BuildInfoPlugin).settings(
   buildInfoKeys := Seq[BuildInfoKey](version),
