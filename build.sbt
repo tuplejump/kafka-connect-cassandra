@@ -71,9 +71,7 @@ javacOptions ++= Seq(
   "-encoding", sourceEncoding
 )
 
-import sbt.{EvictionWarningOptions, CrossVersion}
-
-evictionWarningOptions in update := EvictionWarningOptions.default
+evictionWarningOptions in update := sbt.EvictionWarningOptions.default
   .withWarnTransitiveEvictions(false)
   .withWarnDirectEvictions(false)
   .withWarnScalaVersionEviction(false)
