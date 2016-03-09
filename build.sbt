@@ -24,7 +24,7 @@ de.heikoseeberger.sbtheader.HeaderPlugin.autoImport.headers := Map(
 lazy val cassandra = sys.props.getOrElse("cassandra.version","3.0.0")//latest: 3.0.4
 
 libraryDependencies ++= Seq(
-  "org.apache.kafka"       % "connect-api"           % "0.9.0.1"    % "provided",
+  "org.apache.kafka"       % "connect-api"           % "0.9.0.1"     % "provided",
   "com.datastax.cassandra" % "cassandra-driver-core" % cassandra,   //was: 2.1.9
   "org.scalatest"          %% "scalatest"            % "2.2.6"       % "test,it",
   "org.mockito"            % "mockito-core"          % "2.0.34-beta" % "test,it"
@@ -37,9 +37,16 @@ CassandraPlugin.cassandraSettings
 test in IntegrationTest <<= stopCassandra.dependsOn(test in IntegrationTest).dependsOn(startCassandra)
 testOnly in IntegrationTest <<= (testOnly in IntegrationTest).dependsOn(startCassandra)
 
-cassandraVersion := "2.2.2"
+cassandraVersion := cassandra
 
 cassandraCqlInit := "src/it/resources/setup.cql"
+
+/* TODO
+Found intransitive dependency (org.apache.cassandra:apache-cassandra:3.0.0) while publishMavenStyle is true,
+but Maven repositories do not support intransitive dependencies. Use exclusions instead so transitive dependencies
+will be correctly excluded in dependent projects.
+ */
+publishMavenStyle := false
 
 /* Compiler settings and checks, code checks and compliance: */
 cancelable in Global := true
@@ -96,18 +103,14 @@ lazy val testConfigSettings = inConfig(Test)(Defaults.testTasks) ++
 
 lazy val testSettings = testConfigSettings ++ cassandraSettings ++ Seq(
   fork in IntegrationTest := false,
-  parallelExecution in Test := false,
+  fork in Test := true,
   parallelExecution in IntegrationTest := false,
+  parallelExecution in Test := true,
   testOptions in Test += testOptionsSettings,
-  /*testOptions in IntegrationTest += Tests.Cleanup( () => {
-    val pid = cassandraPid.value
-    println(s"Shutting down cassandra pid[$pid]")
-    s"kill -9 $pid"!
-  }),*/
   testOptions in IntegrationTest += testOptionsSettings,
   (internalDependencyClasspath in IntegrationTest) <<= Classpaths.concat(
-    internalDependencyClasspath in IntegrationTest, exportedProducts in Test)
-)
+    internalDependencyClasspath in IntegrationTest, exportedProducts in Test
+  ))
 
 assemblyMergeStrategy in assembly := {
   case PathList("META-INF", "io.netty.versions.properties") => MergeStrategy.last
@@ -136,7 +139,7 @@ pomExtra :=
 
 lazy val root = (project in file(".")).settings(
     buildInfoKeys := Seq[BuildInfoKey](version),
-    buildInfoPackage := "com.tuplejump.kafka.connector",
+    buildInfoPackage := "com.tuplejump.kafka.connect.cassandra",
     buildInfoObject := "CassandraConnectorInfo")
   .settings(testSettings)
   .enablePlugins(BuildInfoPlugin)

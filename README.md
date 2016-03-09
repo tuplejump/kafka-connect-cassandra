@@ -4,16 +4,17 @@ Kafka Connect Cassandra Connector. This project includes source/sink connectors.
 ## Building from Source
 The project requires SBT to build from source. Execute the following command in the project directory,
 
-```
-$ sbt assembly
-```
+    sbt assembly
 
+This will build against Scala 2.11.7 by default. You can override this with:
+
+    sbt -Dscala.version=2.10.6 assembly
+    
 This will create an assembly jar which can be added to `lib` directory and used with Kafka.
-
 
 ## Current Status
 
-CassandraSink
+### CassandraSink
 It stores Kafka SinkRecord in Cassandra tables. 
 The properties required are
 
@@ -26,8 +27,7 @@ The properties required are
 
 Note: The library does not create the Cassandra tables - users are expected to create those before starting the sink
 
-
-CassandraSource
+### CassandraSource
 It polls Cassandra with  specified query. 
 The properties required are
 
