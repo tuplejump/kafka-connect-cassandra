@@ -31,6 +31,7 @@ libraryDependencies ++= Seq(
 )
 
 import com.github.hochgi.sbt.cassandra._
+
 CassandraPlugin.cassandraSettings
 
 test in IntegrationTest <<= stopCassandra.dependsOn(test in IntegrationTest).dependsOn(startCassandra)
@@ -40,7 +41,56 @@ cassandraVersion := "2.2.2"
 
 cassandraCqlInit := "src/it/resources/setup.cql"
 
+/* Compiler settings and checks, code checks and compliance: */
+cancelable in Global := true
 
+lazy val sourceEncoding = "UTF-8"
+
+scalacOptions ++= Seq(
+  "-Xfatal-warnings",
+  "-deprecation",
+  "-feature",
+  "-language:_",
+  "-unchecked",
+  "-Xlint",
+  "-Yno-adapted-args",
+  "-Ywarn-dead-code",
+  "-encoding", sourceEncoding
+)
+
+scalacOptions ++= (
+  CrossVersion.partialVersion(scalaVersion.value) match {
+    case Some((2, minor)) if minor < 11 => Seq.empty
+    case _ => Seq("-Ywarn-unused-import")
+  })
+
+javacOptions ++= Seq(
+  "-Xmx1G",
+  "-Xlint:unchecked",
+  "-Xlint:deprecation",
+  "-encoding", sourceEncoding
+)
+
+import sbt.{EvictionWarningOptions, CrossVersion}
+
+evictionWarningOptions in update := EvictionWarningOptions.default
+  .withWarnTransitiveEvictions(false)
+  .withWarnDirectEvictions(false)
+  .withWarnScalaVersionEviction(false)
+
+lazy val compileScalastyle = taskKey[Unit]("compileScalastyle")
+
+lazy val testScalastyle = taskKey[Unit]("testScalastyle")
+
+import org.scalastyle.sbt.ScalastylePlugin
+
+ScalastylePlugin.scalastyleFailOnError := true
+
+testScalastyle := ScalastylePlugin.scalastyle.in(Test).toTask("").value
+
+compileScalastyle := ScalastylePlugin.scalastyle.in(Compile).toTask("").value
+
+/* Test, IntegrationTest */
 lazy val testOptionsSettings = Tests.Argument(TestFrameworks.ScalaTest, "-oDF")
 
 lazy val testConfigSettings = inConfig(Test)(Defaults.testTasks) ++
@@ -51,12 +101,11 @@ lazy val testSettings = testConfigSettings ++ cassandraSettings ++ Seq(
   parallelExecution in Test := false,
   parallelExecution in IntegrationTest := false,
   testOptions in Test += testOptionsSettings,
-  // default and stopCassandraAfterTests := true are not working
-  testOptions in IntegrationTest += Tests.Cleanup( () => {
+  /*testOptions in IntegrationTest += Tests.Cleanup( () => {
     val pid = cassandraPid.value
     println(s"Shutting down cassandra pid[$pid]")
     s"kill -9 $pid"!
-  }),
+  }),*/
   testOptions in IntegrationTest += testOptionsSettings,
   (internalDependencyClasspath in IntegrationTest) <<= Classpaths.concat(
     internalDependencyClasspath in IntegrationTest, exportedProducts in Test)
@@ -71,8 +120,8 @@ assemblyMergeStrategy in assembly := {
 
 pomExtra :=
   <scm>
-    <url>git@github.com:tuplejump/kafka-connector.git</url>
-    <connection>scm:git:git@github.com:tuplejump/kafka-connector.git</connection>
+    <url>git@github.com:tuplejump/kafka-connect-cassandra.git</url>
+    <connection>scm:git:git@github.com:tuplejump/kafka-connect-cassandra.git</connection>
   </scm>
     <developers>
       <developer>
@@ -87,9 +136,12 @@ pomExtra :=
       </developer>
     </developers>
 
-lazy val root = (project in file(".")).enablePlugins(BuildInfoPlugin).settings(
-  buildInfoKeys := Seq[BuildInfoKey](version),
-  buildInfoPackage := "com.tuplejump.kafka.connector",
-  buildInfoObject := "CassandraConnectorInfo"
-)
+lazy val root = (project in file(".")).settings(
+    buildInfoKeys := Seq[BuildInfoKey](version),
+    buildInfoPackage := "com.tuplejump.kafka.connector",
+    buildInfoObject := "CassandraConnectorInfo")
+  .settings(testSettings)
+  .enablePlugins(BuildInfoPlugin)
+  .enablePlugins(AutomateHeaderPlugin)
+  .configs(IntegrationTest)
 
