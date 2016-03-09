@@ -1,4 +1,5 @@
-# Kafka Connector for Cassandra
+# Kafka Connect Cassandra
+Kafka Connect Cassandra Connector. This project includes source/sink connectors.
 
 ## Building from Source
 The project requires SBT to build from source. Execute the following command in the project directory,
