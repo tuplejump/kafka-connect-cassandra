@@ -10,6 +10,16 @@ scalaVersion := sys.props.getOrElse("scala.version", crossScalaVersions.value.he
 
 organization := "com.tuplejump"
 
+description := "A Kafka Connect Cassandra Source and Sink connector."
+
+licenses += ("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0"))
+
+import de.heikoseeberger.sbtheader.license.Apache2_0
+de.heikoseeberger.sbtheader.HeaderPlugin.autoImport.headers := Map(
+  "scala" -> Apache2_0("2016", "Tuplejump"),
+  "conf"  -> Apache2_0("2016", "Tuplejump", "#")
+)
+
 libraryDependencies ++= Seq(
   "org.apache.kafka" % "connect-api" % "0.9.0.1" % "provided",
   "com.datastax.cassandra" % "cassandra-driver-core" % "2.1.9",
