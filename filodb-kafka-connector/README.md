@@ -1,1 +1,0 @@
-# Kafka Connector for FiloDB
