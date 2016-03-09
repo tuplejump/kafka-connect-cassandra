@@ -17,7 +17,7 @@
  *
  */
 
-package com.tuplejump.kafka.connector
+package com.tuplejump.kafka.connect.cassandra
 
 object CassandraConnectorConfig {
   val HostConfig = "host"

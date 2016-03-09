@@ -16,7 +16,7 @@
  * limitations under the License.
  *
  */
-package com.tuplejump.kafka.connector
+package com.tuplejump.kafka.connect.cassandra
 
 import scala.collection.JavaConverters._
 import com.datastax.driver.core.{DataType, TestUtil}

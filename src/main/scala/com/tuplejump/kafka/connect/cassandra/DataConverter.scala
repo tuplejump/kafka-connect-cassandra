@@ -17,7 +17,7 @@
  *
  */
 
-package com.tuplejump.kafka.connector
+package com.tuplejump.kafka.connect.cassandra
 
 import java.util.{Date => JDate, Map => JMap}
 
@@ -27,9 +27,9 @@ import com.datastax.driver.core.{ColumnDefinitions, Row}
 import org.apache.kafka.connect.data.Schema.Type._
 import org.apache.kafka.connect.data.{Schema, SchemaBuilder, Struct, Timestamp}
 import org.apache.kafka.connect.sink.SinkRecord
-import com.tuplejump.kafka.connector.CassandraConnectorConfig._
 
 private[connector] object DataConverter {
+  import CassandraConnectorConfig._
 
   //TODO use keySchema, partition and kafkaOffset
   def sinkRecordToQuery(sinkRecord: SinkRecord, props: JMap[String, String]): String = {

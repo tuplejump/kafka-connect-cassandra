@@ -17,7 +17,7 @@
  *
  */
 
-package com.tuplejump.kafka.connector
+package com.tuplejump.kafka.connect.cassandra
 
 import java.util.{List => JList, Map => JMap}
 
@@ -25,9 +25,9 @@ import scala.collection.JavaConverters._
 import org.apache.kafka.connect.connector.Task
 import org.apache.kafka.connect.errors.ConnectException
 import org.apache.kafka.connect.sink.SinkConnector
-import CassandraConnectorConfig._
 
 class CassandraSink extends SinkConnector with Logging{
+  import CassandraConnectorConfig._
 
   private var configProperties = Map.empty[String, String].asJava
 
@@ -38,7 +38,7 @@ class CassandraSink extends SinkConnector with Logging{
   }
 
   override def stop(): Unit = {
-    logger.warn("Kafka-Cassandra Sink Connector is being stopped")
+    logger.warn("Kafka Connect Cassandra Sink shutting down.")
   }
 
   override def start(props: JMap[String, String]): Unit = {

@@ -31,6 +31,6 @@ object TestUtil {
     val definitions: Array[Definition] = cols.map {
       case (x, y) => new Definition("test", "dummy", x, y)
     }.toArray
-    new ColumnDefinitions(definitions)
+    new ColumnDefinitions(definitions, CodecRegistry.DEFAULT_INSTANCE)
   }
 }

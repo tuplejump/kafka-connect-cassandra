@@ -17,7 +17,7 @@
  *
  */
 
-package com.tuplejump.kafka.connector
+package com.tuplejump.kafka.connect.cassandra
 
 import java.util.{List => JList, Map => JMap}
 
@@ -34,7 +34,7 @@ class CassandraSource extends SourceConnector with Logging{
   override def taskConfigs(maxTasks: Int): JList[JMap[String, String]] = List.fill(maxTasks)(configProperties).asJava
 
   override def stop(): Unit = {
-    logger.warn("Kafka-Cassandra Source Connector is being stopped")
+    logger.warn("Kafka Connect Cassandra is shutting down.")
   }
 
   override def start(props: JMap[String, String]): Unit = {

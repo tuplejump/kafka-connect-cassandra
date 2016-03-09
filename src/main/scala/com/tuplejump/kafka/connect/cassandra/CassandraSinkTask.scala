@@ -16,7 +16,7 @@
  * limitations under the License.
  *
  */
-package com.tuplejump.kafka.connector
+package com.tuplejump.kafka.connect.cassandra
 
 import java.util.{Collection => JCollection, Map => JMap}
 
@@ -25,9 +25,10 @@ import com.datastax.driver.core.{Cluster, Session}
 import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.connect.sink.{SinkRecord, SinkTask}
-import com.tuplejump.kafka.connector.CassandraConnectorConfig._
 
 class CassandraSinkTask extends SinkTask {
+  import CassandraConnectorConfig._
+
   private var _session: Option[Session] = None
   private var configProperties: JMap[String, String] = Map.empty[String, String].asJava
 

@@ -17,12 +17,13 @@
  *
  */
 
-package com.tuplejump.kafka.connector
+package com.tuplejump.kafka.connect.cassandra
 
-import scala.collection.JavaConverters._
 import org.apache.kafka.connect.source.SourceTaskContext
 import org.scalatest.mock.MockitoSugar
 import org.scalatest.{FlatSpec, Matchers}
+
+import scala.collection.JavaConverters._
 
 
 class CassandraSourceTaskSpec extends FlatSpec with Matchers with MockitoSugar {

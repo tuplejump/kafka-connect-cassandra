@@ -17,7 +17,7 @@
  *
  */
 
-package com.tuplejump.kafka.connector
+package com.tuplejump.kafka.connect.cassandra
 
 import org.slf4j.LoggerFactory
 

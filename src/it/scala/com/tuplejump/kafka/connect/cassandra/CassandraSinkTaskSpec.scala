@@ -16,14 +16,15 @@
  * limitations under the License.
  *
  */
-package com.tuplejump.kafka.connector
+package com.tuplejump.kafka.connect.cassandra
 
-import scala.collection.JavaConverters._
 import com.datastax.driver.core.Cluster
 import org.apache.kafka.connect.data.{Schema, SchemaBuilder, Struct}
 import org.apache.kafka.connect.sink.{SinkRecord, SinkTaskContext}
 import org.scalatest.mock.MockitoSugar
 import org.scalatest.{FlatSpec, Matchers}
+
+import scala.collection.JavaConverters._
 
 class CassandraSinkTaskSpec extends FlatSpec with Matchers with MockitoSugar {
 

@@ -16,7 +16,7 @@
  * limitations under the License.
  *
  */
-package com.tuplejump.kafka.connector
+package com.tuplejump.kafka.connect.cassandra
 
 import java.util.{Map => JMap}
 
@@ -25,9 +25,9 @@ import org.apache.kafka.connect.errors.ConnectException
 import org.apache.kafka.connect.sink.SinkConnector
 import org.scalatest.mock.MockitoSugar
 import org.scalatest.{FlatSpec, Matchers}
-import com.tuplejump.kafka.connector.CassandraConnectorConfig._
 
 class CassandraSinkSpec extends FlatSpec with Matchers with MockitoSugar {
+  import CassandraConnectorConfig._
 
   private val MULTIPLE_TOPICS: String = "test1,test2"
 

@@ -17,7 +17,7 @@
  *
  */
 
-package com.tuplejump.kafka.connector
+package com.tuplejump.kafka.connect.cassandra
 
 import java.util.{List => JList, Map => JMap, ArrayList=> JArrayList}
 
@@ -25,9 +25,10 @@ import scala.collection.JavaConverters._
 import com.datastax.driver.core.{Row, Cluster, Session}
 import org.apache.kafka.connect.data.{Schema, Struct}
 import org.apache.kafka.connect.source.{SourceRecord, SourceTask}
-import com.tuplejump.kafka.connector.CassandraConnectorConfig._
-
+ 
 class CassandraSourceTask extends SourceTask {
+  import CassandraConnectorConfig._
+
   private var _session: Option[Session] = None
   private var configProperties: JMap[String, String] = Map.empty[String, String].asJava
 
