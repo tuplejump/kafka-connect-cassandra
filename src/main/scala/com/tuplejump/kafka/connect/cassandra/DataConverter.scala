@@ -26,6 +26,7 @@ import org.apache.kafka.connect.data.{Schema, SchemaBuilder, Struct, Timestamp}
 import org.apache.kafka.connect.sink.SinkRecord
 
 private[cassandra] object DataConverter {
+
   import CassandraConnectorConfig._
 
   //TODO use keySchema, partition and kafkaOffset
@@ -64,7 +65,14 @@ private[cassandra] object DataConverter {
     schema.fields().asScala.map {
       colDef =>
         val colName: String = colDef.name
-        struct.put(colName, row.getObject(colName))
+        val colValue =
+          if (colDef.schema().name() == Timestamp.LOGICAL_NAME) {
+            val ts = row.getTimestamp(colName)
+            Timestamp.toLogical(colDef.schema(), ts.getTime)
+          } else {
+            row.getObject(colName)
+          }
+        struct.put(colName, colValue)
     }
     struct
   }

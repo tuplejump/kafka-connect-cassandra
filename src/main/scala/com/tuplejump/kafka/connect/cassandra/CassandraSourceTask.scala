@@ -16,14 +16,15 @@
 
 package com.tuplejump.kafka.connect.cassandra
 
-import java.util.{List => JList, Map => JMap, ArrayList=> JArrayList}
+import java.util.{List => JList, Map => JMap, ArrayList => JArrayList}
 
 import scala.collection.JavaConverters._
 import com.datastax.driver.core.{Row, Cluster, Session}
 import org.apache.kafka.connect.data.{Schema, Struct}
 import org.apache.kafka.connect.source.{SourceRecord, SourceTask}
- 
+
 class CassandraSourceTask extends SourceTask {
+
   import CassandraConnectorConfig._
 
   private var _session: Option[Session] = None
@@ -40,9 +41,24 @@ class CassandraSourceTask extends SourceTask {
     _session.map(_.getCluster.close())
   }
 
-  //Initial implementation only supports bulk load for a query
   override def poll(): JList[SourceRecord] = {
-    val query = configProperties.get(CassandraConnectorConfig.Query) //this property should be there. validation is done prior to starting a CassandraSource
+
+    val userQuery = configProperties.get(CassandraConnectorConfig.Query) //this property should be there. validation is done prior to starting a CassandraSource
+    val query = (userQuery.contains(PreviousTime) || userQuery.contains(CurrentTime)) match {
+        case true =>
+          val pollInterval = Option(configProperties.get(PollInterval).toLong).getOrElse(DefaultPollInterval)
+          //TODO remove Thread.sleep to control poll Interval
+          Thread.sleep(pollInterval)
+          val now = System.currentTimeMillis()
+          val timestamp = now - pollInterval
+          userQuery.replaceAll(PreviousTime, s"$timestamp").replaceAll(CurrentTime, s"$now")
+        case _ => userQuery
+      }
+
+    getSourceRecords(query)
+  }
+
+  private def getSourceRecords(query: String): JList[SourceRecord] = {
     var result: JList[SourceRecord] = new JArrayList[SourceRecord]()
     _session match {
       case Some(session) =>
@@ -52,7 +68,7 @@ class CassandraSourceTask extends SourceTask {
           //TODO check if a task can query multiple tables
           val schema: Schema = DataConverter.columnDefToSchema(row.getColumnDefinitions)
           val valueStruct: Struct = DataConverter.rowToStruct(schema, row)
-          val sinkRecord = new SourceRecord(sourcePartition, null, configProperties.get("topic"), schema, valueStruct)
+          val sinkRecord = new SourceRecord(sourcePartition, null, configProperties.get(Topic), schema, valueStruct)
           result.add(sinkRecord)
         }
         result

@@ -45,8 +45,11 @@ class CassandraSource extends SourceConnector with Logging{
   override def version(): String = CassandraConnectorInfo.version
 
   private def isValidConfig(props: Map[String, String]): Boolean = {
-    CassandraConnectorConfig.isValidValue(props,
+    val hasTopic= CassandraConnectorConfig.isValidValue(props,
+      CassandraConnectorConfig.Topic, { x => x.nonEmpty })
+    val hasQuery = CassandraConnectorConfig.isValidValue(props,
       CassandraConnectorConfig.Query, { x => x.nonEmpty })
+    hasTopic && hasQuery
   }
 
 }

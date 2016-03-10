@@ -16,6 +16,8 @@
 
 package com.tuplejump.kafka.connect.cassandra
 
+import org.apache.kafka.connect.errors.ConnectException
+
 object CassandraConnectorConfig {
   val HostConfig = "host"
   val PortConfig = "port"
@@ -26,6 +28,11 @@ object CassandraConnectorConfig {
   val TopicSeparator = ","
 
   val Query = "query"
+  val Topic = "topic"
+  val PollInterval = "pollInterval"
+  val DefaultPollInterval: Long = 5000
+  val PreviousTime = "previousTime()"
+  val CurrentTime = "currentTime()"
 
   private[cassandra] def tableConfig(topic: String): String = {
     if (Option(topic).isDefined && topic.trim.nonEmpty) {
@@ -45,4 +52,4 @@ object CassandraConnectorConfig {
   }
 }
 
-class CassandraConnectorException(msg: String) extends RuntimeException(msg)
+class CassandraConnectorException(msg: String) extends ConnectException(msg)

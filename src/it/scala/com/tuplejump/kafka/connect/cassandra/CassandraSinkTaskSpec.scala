@@ -28,6 +28,8 @@ import scala.collection.JavaConverters._
 
 class CassandraSinkTaskSpec extends FlatSpec with Matchers with MockitoSugar {
 
+  import CassandraConnectorConfig._
+
   it should "start sink task" in {
     val sinkTask = new CassandraSinkTask()
     val mockContext = mock[SinkTaskContext]
@@ -46,7 +48,7 @@ class CassandraSinkTaskSpec extends FlatSpec with Matchers with MockitoSugar {
     val mockContext = mock[SinkTaskContext]
 
     sinkTask.initialize(mockContext)
-    sinkTask.start(Map("host" -> "localhost", topicName + "_table" -> tableName).asJava)
+    sinkTask.start(Map(HostConfig -> DefaultHost, topicName + "_table" -> tableName).asJava)
     val valueSchema = SchemaBuilder.struct.name("record").version(1)
       .field("key", Schema.STRING_SCHEMA)
       .field("value", Schema.INT32_SCHEMA).build
@@ -61,7 +63,7 @@ class CassandraSinkTaskSpec extends FlatSpec with Matchers with MockitoSugar {
 
     sinkTask.stop()
 
-    val cluster = Cluster.builder().addContactPoint("localhost").build()
+    val cluster = Cluster.builder().addContactPoint(DefaultHost).build()
     val session = cluster.connect()
     val result = session.execute(s"select count(1) from ${tableName}").one()
     val rowCount = result.getLong(0)

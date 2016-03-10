@@ -22,25 +22,32 @@ import org.scalatest.{FlatSpec, Matchers}
 
 class CassandraSourceSpec extends FlatSpec with Matchers {
 
+  import CassandraConnectorConfig._
+
   it should "validate configuration" in {
     val cassandraSource = new CassandraSource()
     an[ConnectException] should be thrownBy {
       cassandraSource.start(Map.empty[String, String].asJava)
     }
     an[ConnectException] should be thrownBy {
-      cassandraSource.start(Map(CassandraConnectorConfig.Query -> "").asJava)
+      cassandraSource.start(Map(Query -> "").asJava)
+    }
+    an[ConnectException] should be thrownBy {
+      cassandraSource.start(Map(Topic -> "test",
+        Query -> "").asJava)
     }
   }
 
   it should "have taskConfigs" in {
     val query = "Select * from test.playlists"
-    val props = Map(CassandraConnectorConfig.Query -> query).asJava
+    val props = Map(Topic -> "test",
+      Query -> query).asJava
     val cassandraSource = new CassandraSource
     cassandraSource.start(props)
 
     var taskConfigs = cassandraSource.taskConfigs(1)
     taskConfigs.size should be(1)
-    taskConfigs.get(0).get(CassandraConnectorConfig.Query) should be(query)
+    taskConfigs.get(0).get(Query) should be(query)
 
     taskConfigs = cassandraSource.taskConfigs(2)
     taskConfigs.size should be(2)

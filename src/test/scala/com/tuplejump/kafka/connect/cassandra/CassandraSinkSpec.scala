@@ -30,7 +30,7 @@ class CassandraSinkSpec extends FlatSpec with Matchers with MockitoSugar {
   private val MULTIPLE_TOPICS: String = "test1,test2"
 
   private val sinkProperties: JMap[String, String] = Map(SinkConnector.TOPICS_CONFIG -> MULTIPLE_TOPICS,
-    CassandraConnectorConfig.HostConfig -> "127.0.0.1", tableConfig("test1") -> "test.test1",
+    HostConfig -> "127.0.0.1", tableConfig("test1") -> "test.test1",
     tableConfig("test2") -> "test.test1").asJava
 
   it should "validate configuration" in {
@@ -51,7 +51,7 @@ class CassandraSinkSpec extends FlatSpec with Matchers with MockitoSugar {
     cassandraSink.start(sinkProperties)
     var taskConfigs = cassandraSink.taskConfigs(1)
     taskConfigs.size should be(1)
-    taskConfigs.get(0).get(CassandraConnectorConfig.HostConfig) should be("127.0.0.1")
+    taskConfigs.get(0).get(HostConfig) should be("127.0.0.1")
 
     taskConfigs = cassandraSink.taskConfigs(2)
     taskConfigs.size should be(2)

@@ -28,6 +28,8 @@ import scala.collection.JavaConverters._
 
 class CassandraSourceTaskSpec extends FlatSpec with Matchers with MockitoSugar {
 
+  import CassandraConnectorConfig._
+
   it should "start source task" in {
     val sourceTask = new CassandraSourceTask()
     val mockContext = mock[SourceTaskContext]
@@ -46,7 +48,9 @@ class CassandraSourceTaskSpec extends FlatSpec with Matchers with MockitoSugar {
     val mockContext = mock[SourceTaskContext]
 
     sourceTask.initialize(mockContext)
-    sourceTask.start(Map("host" -> "localhost", "query" -> query).asJava)
+    sourceTask.start(Map(HostConfig -> "localhost",
+      Query -> query,
+      Topic -> "test").asJava)
 
     val result = sourceTask.poll()
 
