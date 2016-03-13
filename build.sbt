@@ -27,7 +27,13 @@ libraryDependencies ++= Seq(
   "org.apache.kafka"       % "connect-api"           % "0.9.0.1"     % "provided",
   "com.datastax.cassandra" % "cassandra-driver-core" % cassandra,   //was: 2.1.9
   "org.scalatest"          %% "scalatest"            % "2.2.6"       % "test,it",
-  "org.mockito"            % "mockito-core"          % "2.0.34-beta" % "test,it"
+  "org.mockito"            % "mockito-core"          % "2.0.34-beta" % "test,it",
+  CrossVersion.partialVersion(scalaVersion.value) match {
+    case Some((2, minor)) if minor < 11 =>
+      "org.slf4j"                  % "slf4j-api"     % "1.7.13"
+    case _ =>
+      "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0"
+  }
 )
 
 import com.github.hochgi.sbt.cassandra._
@@ -35,7 +41,7 @@ import com.github.hochgi.sbt.cassandra._
 CassandraPlugin.cassandraSettings
 
 test in IntegrationTest <<= stopCassandra.dependsOn(test in IntegrationTest).dependsOn(startCassandra)
-testOnly in IntegrationTest <<= (testOnly in IntegrationTest).dependsOn(startCassandra)
+testOnly in IntegrationTest <<= (testOnly in IntegrationTest).dependsOn(startCassandra)//todo stop after testOnly
 
 cassandraVersion := cassandra
 

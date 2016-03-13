@@ -18,50 +18,27 @@ package com.tuplejump.kafka.connect.cassandra
 
 import java.util.{List => JList, Map => JMap}
 
+import scala.collection.immutable
 import scala.collection.JavaConverters._
 import org.apache.kafka.connect.connector.Task
+import org.apache.kafka.common.config.ConfigException
 import org.apache.kafka.connect.errors.ConnectException
 import org.apache.kafka.connect.sink.SinkConnector
 
-class CassandraSink extends SinkConnector with Logging{
-  import CassandraConnectorConfig._
-
-  private var configProperties = Map.empty[String, String].asJava
+class CassandraSink extends SinkConnector with ConnectorLike {
 
   override val taskClass: Class[_ <: Task] = classOf[CassandraSinkTask]
 
   override def taskConfigs(maxTasks: Int): JList[JMap[String, String]] = {
-    List.fill(maxTasks)(configProperties).asJava
+    List.fill(maxTasks)(configuration.config.asJava).asJava
   }
+
+  override def start(config: JMap[String, String]): Unit =
+    try configure(immutable.Map.empty[String,String] ++ config.asScala, taskClass) catch {
+      case e: ConfigException => throw new ConnectException(e)
+    }
 
   override def stop(): Unit = {
-    logger.warn("Kafka Connect Cassandra Sink shutting down.")
-  }
-
-  override def start(props: JMap[String, String]): Unit = {
-    if (isValidConfig(props.asScala.toMap)) {
-      configProperties = props
-    } else {
-      throw new ConnectException(
-        s"""Couldn't start CassandraSink due to configuration error.`topics` property cannot be empty and
-            |there should be a `<topicName>_table` key whose value is `<keyspace>.<tableName>` for every topic.""".stripMargin)
-    }
-  }
-
-  override def version(): String = CassandraConnectorInfo.version
-
-  private def isValidConfig(config: Map[String, String]): Boolean = {
-    CassandraConnectorConfig.isValidValue(config,
-      SinkConnector.TOPICS_CONFIG, { topics =>
-        topics.nonEmpty && topics.split(TopicSeparator).forall {
-          topicName =>
-            val key = tableConfig(topicName)
-            CassandraConnectorConfig.isValidValue(config, key, {
-              tableName =>
-                tableName.split("\\.").length == 2
-            })
-        }
-      }
-    )
+    logger.info("Kafka Connect Cassandra Sink shutting down.")
   }
 }
