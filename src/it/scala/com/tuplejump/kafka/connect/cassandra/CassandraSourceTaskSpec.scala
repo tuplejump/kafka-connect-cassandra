@@ -19,14 +19,14 @@
 
 package com.tuplejump.kafka.connect.cassandra
 
-import org.apache.kafka.connect.source.SourceTaskContext
-import org.scalatest.mock.MockitoSugar
-import org.scalatest.{FlatSpec, Matchers}
-
 import scala.collection.JavaConverters._
+import org.apache.kafka.connect.source.SourceTaskContext
 
+class CassandraSourceTaskSpec extends AbstractFlatSpec {
 
-class CassandraSourceTaskSpec extends FlatSpec with Matchers with MockitoSugar {
+  val query = "SELECT * FROM test.playlists"
+  val topic = "test"
+  val config = sourceConfig(query, topic)
 
   it should "start source task" in {
     val sourceTask = new CassandraSourceTask()
@@ -34,19 +34,17 @@ class CassandraSourceTaskSpec extends FlatSpec with Matchers with MockitoSugar {
 
     sourceTask.initialize(mockContext)
 
-    sourceTask.start(Map.empty[String, String].asJava)
-    sourceTask.getSession.isDefined should be(true)
+    sourceTask.start(config.asJava)
+    Option(sourceTask.session).isDefined should be(true)
     sourceTask.stop()
   }
 
   it should "fetch records from cassandra" in {
-    val query = "SELECT * FROM test.playlists"
-
     val sourceTask = new CassandraSourceTask()
     val mockContext = mock[SourceTaskContext]
 
     sourceTask.initialize(mockContext)
-    sourceTask.start(Map("host" -> "localhost", "query" -> query).asJava)
+    sourceTask.start(config.asJava)
 
     val result = sourceTask.poll()
 

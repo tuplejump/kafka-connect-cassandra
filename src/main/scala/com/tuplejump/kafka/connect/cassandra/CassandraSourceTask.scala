@@ -19,55 +19,81 @@ package com.tuplejump.kafka.connect.cassandra
 import java.util.{List => JList, Map => JMap, ArrayList=> JArrayList}
 
 import scala.collection.JavaConverters._
-import com.datastax.driver.core.{Row, Cluster, Session}
-import org.apache.kafka.connect.data.{Schema, Struct}
+import org.apache.kafka.connect.connector.Task
 import org.apache.kafka.connect.source.{SourceRecord, SourceTask}
- 
-class CassandraSourceTask extends SourceTask {
-  import CassandraConnectorConfig._
+import org.apache.kafka.connect.data.{Schema, SchemaBuilder, Struct, Timestamp}
+import org.apache.kafka.connect.errors.DataException
+import com.datastax.driver.core.DataType.{Name => CQLType}
+import com.datastax.driver.core.{ColumnDefinitions, Row}
 
-  private var _session: Option[Session] = None
-  private var configProperties: JMap[String, String] = Map.empty[String, String].asJava
+/* TODO 1. Check if a task can query multiple tables
+        2. Add batch max and handling (see config)
+        3. Partition and offset - Map("db" -> "database_name","table" -> "table_name") */
+class CassandraSourceTask extends SourceTask with TaskLifecycle {
+  import CassandraSourceTask._
 
-  //This has been exposed to be used while testing only
-  private[cassandra] def getSession = _session
+  private implicit var partitions: JMap[String, String] = Map.empty[String, String].asJava
 
-  //TODO figure out what should be sourcePartition and sourceOffset
-  /*From SourceTask it should be something like -Map("db" -> "database_name","table" -> "table_name").asJava*/
-  private var sourcePartition: JMap[String, String] = Map.empty[String, String].asJava
+  def taskClass: Class[_ <: Task] = classOf[CassandraSourceTask]
 
-  override def stop(): Unit = {
-    _session.map(_.getCluster.close())
-  }
-
-  //Initial implementation only supports bulk load for a query
-  override def poll(): JList[SourceRecord] = {
-    val query = configProperties.get(CassandraConnectorConfig.Query) //this property should be there. validation is done prior to starting a CassandraSource
+  /** Initial implementation only supports bulk load for a query. */
+  override def poll: JList[SourceRecord] = {
     var result: JList[SourceRecord] = new JArrayList[SourceRecord]()
-    _session match {
-      case Some(session) =>
-        val resultSet = session.execute(query)
-        while (!resultSet.isExhausted) {
-          val row: Row = resultSet.one()
-          //TODO check if a task can query multiple tables
-          val schema: Schema = DataConverter.columnDefToSchema(row.getColumnDefinitions)
-          val valueStruct: Struct = DataConverter.rowToStruct(schema, row)
-          val sinkRecord = new SourceRecord(sourcePartition, null, configProperties.get("topic"), schema, valueStruct)
-          result.add(sinkRecord)
-        }
-        result
-      case None =>
-        throw new CassandraConnectorException("Failed to get cassandra session.")
+    val offset = Map.empty[String, Any].asJava //TODO
+
+    /* This property exists by now - validation is done prior to starting a CassandraSource. */
+    val source = configuration.source.head //TODO wart
+
+    for (row <- session.execute(source.query).iterator.asScala) {
+      val record = convert(row, offset, source.topic)
+      result.add(record)
     }
-  }
 
-  override def start(props: JMap[String, String]): Unit = {
-    configProperties = props
-    val host = configProperties.getOrDefault(HostConfig, DefaultHost)
-    val port = configProperties.getOrDefault(PortConfig, DefaultPort).toInt
-    val cluster = Cluster.builder().addContactPoint(host).withPort(port)
-    _session = Some(cluster.build().connect())
+    result
   }
-
-  override def version(): String = CassandraConnectorInfo.version
 }
+
+/** INTERNAL API. */
+private[kafka] object CassandraSourceTask {
+  import Configuration._
+
+  def convert(row: Row, offset: JMap[String, Any], topic: TopicName)
+             (implicit partitions: JMap[String, String]): SourceRecord = {
+    val schema = fieldsSchema(row.getColumnDefinitions)
+    val struct = valueStruct(schema, row)
+    new SourceRecord(partitions, offset, topic, schema, struct)
+  }
+
+  def fieldsSchema(columns: ColumnDefinitions): Schema = {
+    val builder = SchemaBuilder.struct
+
+    for (column <- columns.asList.asScala) builder.field(column.getName, fieldType(column))
+
+    builder.build()
+  }
+
+  def valueStruct(schema: Schema, row: Row): Struct = {
+    val struct: Struct = new Struct(schema)
+
+    for (field <- schema.fields.asScala) {
+      val colName: String = field.name
+      struct.put(colName, row.getObject(colName))
+    }
+
+    struct
+  }
+
+  private def fieldType(column: ColumnDefinitions.Definition): Schema =
+    column.getType.getName match {
+      case CQLType.ASCII | CQLType.VARCHAR | CQLType.TEXT => Schema.STRING_SCHEMA
+      case CQLType.BIGINT | CQLType.COUNTER => Schema.INT64_SCHEMA
+      case CQLType.BOOLEAN => Schema.BOOLEAN_SCHEMA
+      case CQLType.DECIMAL | CQLType.DOUBLE => Schema.FLOAT64_SCHEMA
+      case CQLType.FLOAT => Schema.FLOAT32_SCHEMA
+      case CQLType.INT => Schema.INT32_SCHEMA
+      case CQLType.TIMESTAMP => Timestamp.SCHEMA
+      case CQLType.VARINT => Schema.INT64_SCHEMA
+      case other => throw new DataException(s"Querying for type $other is not supported")
+    }
+}
+

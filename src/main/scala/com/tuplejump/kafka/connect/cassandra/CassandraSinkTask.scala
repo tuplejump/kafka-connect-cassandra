@@ -16,50 +16,68 @@
 
 package com.tuplejump.kafka.connect.cassandra
 
-import java.util.{Collection => JCollection, Map => JMap}
+import java.util.{Collection => JCollection, Map => JMap, Date => JDate}
+
+import org.apache.kafka.connect.connector.Task
 
 import scala.collection.JavaConverters._
-import com.datastax.driver.core.{Cluster, Session}
 import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.connect.sink.{SinkRecord, SinkTask}
+import org.apache.kafka.connect.errors.{ConnectException, DataException}
+import org.apache.kafka.connect.data.{Schema, Struct, Timestamp}
+import org.apache.kafka.connect.data.Schema.Type._
 
-class CassandraSinkTask extends SinkTask {
-  import CassandraConnectorConfig._
+class CassandraSinkTask extends SinkTask with TaskLifecycle {
+  import CassandraSinkTask._
 
-  private var _session: Option[Session] = None
-  private var configProperties: JMap[String, String] = Map.empty[String, String].asJava
+  def taskClass: Class[_ <: Task] = classOf[CassandraSinkTask]
 
-  //This has been exposed to be used while testing only
-  private[cassandra] def getSession = _session
-
-  override def stop(): Unit = {
-    _session.map(_.getCluster.close())
-  }
-
-  override def put(records: JCollection[SinkRecord]): Unit = {
-    _session match {
-      case Some(session) =>
-        records.asScala.foreach {
-          r =>
-            val query = DataConverter.sinkRecordToQuery(r, configProperties)
-            session.execute(query)
-        }
-      case None =>
-        throw new CassandraConnectorException("Failed to get cassandra session.")
+  override def put(records: JCollection[SinkRecord]): Unit =
+    records.asScala.foreach { record =>
+      configuration.find(record.topic) match {
+        case Some(topic) =>
+          val query = convert(record, topic)
+          session.execute(query)
+        case other =>
+          throw new ConnectException("Failed to get cassandra session.")
+      }
     }
+
+  /** This method is not relevant as we insert every received record in Cassandra. */
+  override def flush(offsets: JMap[TopicPartition, OffsetAndMetadata]): Unit = ()
+
+}
+
+/** INTERNAL API. */
+private[kafka] object CassandraSinkTask {
+  import Configuration._
+
+  /* TODO: Use keySchema, partition and kafkaOffset
+   TODO: Add which types are currently supported in README */
+  def convert(record: SinkRecord, sink: SinkConfig): Query = {
+    val valueSchema = record.valueSchema
+    val columnNames = valueSchema.fields.asScala.map(_.name).toSet
+    val columnValues = valueSchema.`type`() match {
+      case STRUCT =>
+        val struct: Struct = record.value.asInstanceOf[Struct]
+        columnNames.map(schema(valueSchema, struct, _)).mkString(",")
+      case other =>
+        throw new DataException(
+          s"Unable to create insert statement with unsupported value schema type $other.")
+    }
+    s"INSERT INTO ${sink.namespace}(${columnNames.mkString(",")}) VALUES($columnValues)"
   }
 
-  //This method is not relevant as we insert every received record in Cassandra
-  override def flush(offsets: JMap[TopicPartition, OffsetAndMetadata]): Unit = {}
-
-  override def start(props: JMap[String, String]): Unit = {
-    configProperties = props
-    val host = configProperties.getOrDefault(HostConfig, DefaultHost)
-    val port = configProperties.getOrDefault(PortConfig, DefaultPort).toInt
-    val cluster = Cluster.builder().addContactPoint(host).withPort(port)
-    _session = Some(cluster.build().connect())
-  }
-
-  override def version(): String = CassandraConnectorInfo.version
+  /* TODO support all types. */
+  def schema(valueSchema: Schema, result: Struct, col: String): AnyRef =
+    valueSchema.field(col).schema match {
+      case x if x.`type`() == Schema.STRING_SCHEMA.`type`() =>
+        s"'${result.get(col).toString}'"
+      case x if x.name() == Timestamp.LOGICAL_NAME =>
+        val time = Timestamp.fromLogical(x, result.get(col).asInstanceOf[JDate])
+        s"$time"
+      case y =>
+        result.get(col)
+    }
 }
