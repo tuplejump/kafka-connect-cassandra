@@ -44,7 +44,7 @@ test in IntegrationTest <<= stopCassandra.dependsOn(test in IntegrationTest).dep
 testOnly in IntegrationTest <<= (testOnly in IntegrationTest).dependsOn(startCassandra)//todo stop after testOnly
 
 cassandraVersion := cassandra
-
+cassandraStartDeadline := 40
 cassandraCqlInit := "src/it/resources/setup.cql"
 
 /* TODO
