@@ -18,35 +18,26 @@ package com.tuplejump.kafka.connect.cassandra
 
 import java.util.{List => JList, Map => JMap}
 
+import scala.collection.immutable
 import scala.collection.JavaConverters._
 import org.apache.kafka.connect.connector.Task
+import org.apache.kafka.common.config.ConfigException
 import org.apache.kafka.connect.errors.ConnectException
 import org.apache.kafka.connect.source.SourceConnector
 
-class CassandraSource extends SourceConnector with Logging{
-  private var configProperties = Map.empty[String, String].asJava
+class CassandraSource extends SourceConnector with ConnectorLike with Logging {
 
   override val taskClass: Class[_ <: Task] = classOf[CassandraSourceTask]
 
-  override def taskConfigs(maxTasks: Int): JList[JMap[String, String]] = List.fill(maxTasks)(configProperties).asJava
+  override def taskConfigs(maxTasks: Int): JList[JMap[String, String]] =
+    List.fill(maxTasks)(configuration.config.asJava).asJava
+
+  override def start(props: JMap[String, String]): Unit =
+    try configure(immutable.Map.empty[String, String] ++ props.asScala, taskClass) catch {
+      case e: ConfigException => throw new ConnectException(e)
+    }
 
   override def stop(): Unit = {
     logger.warn("Kafka Connect Cassandra is shutting down.")
   }
-
-  override def start(props: JMap[String, String]): Unit = {
-    if (isValidConfig(props.asScala.toMap)) {
-      configProperties = props
-    } else {
-      throw new ConnectException("Couldn't start CassandraSource due to configuration error.")
-    }
-  }
-
-  override def version(): String = CassandraConnectorInfo.version
-
-  private def isValidConfig(props: Map[String, String]): Boolean = {
-    CassandraConnectorConfig.isValidValue(props,
-      CassandraConnectorConfig.Query, { x => x.nonEmpty })
-  }
-
 }
