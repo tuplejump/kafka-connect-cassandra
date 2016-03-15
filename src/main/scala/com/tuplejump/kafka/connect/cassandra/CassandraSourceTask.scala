@@ -38,15 +38,6 @@ class CassandraSourceTask extends SourceTask with TaskLifecycle {
 
   def taskClass: Class[_ <: Task] = classOf[CassandraSourceTask]
 
-  /* Return a new DStream in which each RDD contains all the elements in seen in a
-   * sliding window of time over this DStream.
-   * @param windowDuration width of the window; must be a multiple of this DStream's
-   *                       batching interval
-   * @param slideDuration  sliding interval of the window (i.e., the interval after which
-   *                       the new DStream will generate RDDs); must be a multiple of this
-   *                       DStream's batching interval
-   */
-
   /** Initial implementation only supports bulk load for a query. */
   override def poll: JList[SourceRecord] = {
     import System.{ currentTimeMillis => timestamp }
