@@ -18,8 +18,6 @@ package com.tuplejump.kafka.connect.cassandra
 
 import java.util.{Map => JMap}
 
-import com.tuplejump.kafka.connect.cassandra.Configuration.SourceConfig
-
 import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.util.control.NonFatal
@@ -44,21 +42,26 @@ private[kafka] trait ConnectorLike extends Logging {
     * @param config the user config
     */
   protected def configure(config: Map[String, String], taskClass: Class[_ <: Task]): Unit = {
-    // work around for the enforced mutability in the kafka connect api
+
+    // work around for the enforced mutability in the kafka api for restarts.
     configuration = Configuration(config)
 
-    taskClass match {
-      case `source` if configuration.source.isEmpty =>
-        throw new ConfigException(s"""
-            Unable to start ${getClass.getName}: `query` property cannot be empty.""")
+    validate(taskClass)
+    logger.info("Configured and starting.")
+  }
 
-      case `sink` if configuration.sink.isEmpty =>
-        throw new ConfigException(s"""
-           Unable to start ${getClass.getName}: `topics` property cannot be empty
-           and there should be a `<topicName>_table` key whose value is
-           `<keyspace>.<tableName>` for every topic.""")
-      case _ =>
-    }
+  /** Fails fast on [[org.apache.kafka.connect.connector.Connector]] `start` if not valid. */
+  private def validate(taskClass: Class[_ <: Task]): Unit = taskClass match {
+    case `source` if configuration.source.isEmpty =>
+      throw new ConfigException(s"""Unable to start: `query` and `topic`
+        must not be empty: ${configuration.source}.""")
+
+    case `sink` if configuration.sink.isEmpty =>
+      throw new ConfigException(s"""Unable to start: `topics` must not
+        be emptyand there should be a `<topicName>_table` key with format
+        `<keyspace>.<tableName>` for each topic: ${configuration.sink}.""")
+
+    case _ =>
   }
 }
 
