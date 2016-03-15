@@ -28,6 +28,7 @@ libraryDependencies ++= Seq(
   "com.datastax.cassandra" % "cassandra-driver-core" % cassandra,   //was: 2.1.9
   "org.scalatest"          %% "scalatest"            % "2.2.6"       % "test,it",
   "org.mockito"            % "mockito-core"          % "2.0.34-beta" % "test,it",
+  "ch.qos.logback"         % "logback-classic"       % "1.0.7"       % "test,it",
   CrossVersion.partialVersion(scalaVersion.value) match {
     case Some((2, minor)) if minor < 11 =>
       "org.slf4j"                  % "slf4j-api"     % "1.7.13"

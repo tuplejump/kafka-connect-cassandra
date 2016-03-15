@@ -25,7 +25,10 @@ import org.apache.kafka.common.config.ConfigException
 import org.apache.kafka.connect.errors.ConnectException
 import org.apache.kafka.connect.source.SourceConnector
 
-class CassandraSource extends SourceConnector with ConnectorLike with Logging {
+/** Cassandra [[SourceConnector]] data flow: a Cassandra
+  * source with a Kafka sink.
+  */
+class CassandraSource extends SourceConnector with ConnectorLike {
 
   override val taskClass: Class[_ <: Task] = classOf[CassandraSourceTask]
 
