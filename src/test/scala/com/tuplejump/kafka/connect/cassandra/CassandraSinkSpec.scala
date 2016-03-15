@@ -21,17 +21,18 @@ import java.util.{Map => JMap}
 import scala.collection.JavaConverters._
 import org.apache.kafka.connect.errors.ConnectException
 import org.apache.kafka.connect.sink.SinkConnector
-import org.scalatest.mock.MockitoSugar
-import org.scalatest.{FlatSpec, Matchers}
 
-class CassandraSinkSpec extends FlatSpec with Matchers with MockitoSugar {
-  import CassandraConnectorConfig._
+class CassandraSinkSpec extends AbstractFlatSpec {
+  import Configuration.SinkConfig._
 
   private val MULTIPLE_TOPICS: String = "test1,test2"
 
-  private val sinkProperties: JMap[String, String] = Map(SinkConnector.TOPICS_CONFIG -> MULTIPLE_TOPICS,
-    HostConfig -> "127.0.0.1", tableConfig("test1") -> "test.test1",
-    tableConfig("test2") -> "test.test1").asJava
+  private val sinkProperties: JMap[String, String] =
+    Map(SinkConnector.TOPICS_CONFIG -> MULTIPLE_TOPICS,
+    CassandraCluster.HostKey -> "127.0.0.1",
+      keyFor("test1") -> "test.test1",
+      keyFor("test2") -> "test.test1").asJava
+
 
   it should "validate configuration" in {
     val cassandraSink = new CassandraSink()
@@ -42,7 +43,7 @@ class CassandraSinkSpec extends FlatSpec with Matchers with MockitoSugar {
       cassandraSink.start(Map(SinkConnector.TOPICS_CONFIG -> MULTIPLE_TOPICS).asJava)
     }
     an[ConnectException] should be thrownBy {
-      cassandraSink.start(Map(SinkConnector.TOPICS_CONFIG -> "test", tableConfig("test") -> "test").asJava)
+      cassandraSink.start(Map(SinkConnector.TOPICS_CONFIG -> "test", keyFor("test") -> "test").asJava)
     }
   }
 
@@ -51,7 +52,7 @@ class CassandraSinkSpec extends FlatSpec with Matchers with MockitoSugar {
     cassandraSink.start(sinkProperties)
     var taskConfigs = cassandraSink.taskConfigs(1)
     taskConfigs.size should be(1)
-    taskConfigs.get(0).get(HostConfig) should be("127.0.0.1")
+    taskConfigs.get(0).get(CassandraCluster.HostKey) should be("127.0.0.1")
 
     taskConfigs = cassandraSink.taskConfigs(2)
     taskConfigs.size should be(2)

@@ -18,11 +18,8 @@ package com.tuplejump.kafka.connect.cassandra
 
 import scala.collection.JavaConverters._
 import org.apache.kafka.connect.errors.ConnectException
-import org.scalatest.{FlatSpec, Matchers}
 
-class CassandraSourceSpec extends FlatSpec with Matchers {
-
-  import CassandraConnectorConfig._
+class CassandraSourceSpec extends AbstractFlatSpec {
 
   it should "validate configuration" in {
     val cassandraSource = new CassandraSource()
@@ -30,24 +27,26 @@ class CassandraSourceSpec extends FlatSpec with Matchers {
       cassandraSource.start(Map.empty[String, String].asJava)
     }
     an[ConnectException] should be thrownBy {
-      cassandraSource.start(Map(Query -> "").asJava)
+      cassandraSource.start(Map(Configuration.QueryKey -> "").asJava)
     }
     an[ConnectException] should be thrownBy {
-      cassandraSource.start(Map(Topic -> "test",
-        Query -> "").asJava)
+      cassandraSource.start(Map(Configuration.TopicKey -> "test",
+        Configuration.QueryKey -> "").asJava)
     }
   }
 
   it should "have taskConfigs" in {
     val query = "Select * from test.playlists"
-    val props = Map(Topic -> "test",
-      Query -> query).asJava
+    val topic = "test"
+    val config = sourceConfig(query, topic)
+
     val cassandraSource = new CassandraSource
-    cassandraSource.start(props)
+    cassandraSource.start(config.asJava)
 
     var taskConfigs = cassandraSource.taskConfigs(1)
     taskConfigs.size should be(1)
-    taskConfigs.get(0).get(Query) should be(query)
+    taskConfigs.get(0).get(Configuration.QueryKey) should be(query)
+    taskConfigs.get(0).get(Configuration.TopicKey) should be(topic)
 
     taskConfigs = cassandraSource.taskConfigs(2)
     taskConfigs.size should be(2)

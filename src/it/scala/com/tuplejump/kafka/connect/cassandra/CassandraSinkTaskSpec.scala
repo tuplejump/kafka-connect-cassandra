@@ -18,25 +18,23 @@
  */
 package com.tuplejump.kafka.connect.cassandra
 
-import com.datastax.driver.core.Cluster
+import scala.collection.JavaConverters._
 import org.apache.kafka.connect.data.{Schema, SchemaBuilder, Struct}
 import org.apache.kafka.connect.sink.{SinkRecord, SinkTaskContext}
-import org.scalatest.mock.MockitoSugar
-import org.scalatest.{FlatSpec, Matchers}
 
-import scala.collection.JavaConverters._
+class CassandraSinkTaskSpec extends AbstractFlatSpec {
 
-class CassandraSinkTaskSpec extends FlatSpec with Matchers with MockitoSugar {
-
-  import CassandraConnectorConfig._
+  val topicName = "test_kv_topic"
+  val tableName = "test.kv"
+  val config = sinkConfig((topicName, tableName))
 
   it should "start sink task" in {
     val sinkTask = new CassandraSinkTask()
     val mockContext = mock[SinkTaskContext]
 
     sinkTask.initialize(mockContext)
-    sinkTask.start(Map.empty[String, String].asJava)
-    sinkTask.getSession.isDefined should be(true)
+    sinkTask.start(config.asJava)
+    Option(sinkTask.session).isDefined should be(true)
     sinkTask.stop()
   }
 
@@ -48,24 +46,23 @@ class CassandraSinkTaskSpec extends FlatSpec with Matchers with MockitoSugar {
     val mockContext = mock[SinkTaskContext]
 
     sinkTask.initialize(mockContext)
-    sinkTask.start(Map(HostConfig -> DefaultHost, topicName + "_table" -> tableName).asJava)
+    sinkTask.start(config.asJava)
+
     val valueSchema = SchemaBuilder.struct.name("record").version(1)
       .field("key", Schema.STRING_SCHEMA)
       .field("value", Schema.INT32_SCHEMA).build
     val value1 = new Struct(valueSchema).put("key", "pqr").put("value", 15)
     val value2 = new Struct(valueSchema).put("key", "abc").put("value", 17)
 
-
-    val record1 = new SinkRecord(topicName, 1, null, null, valueSchema, value1, 0)
-    val record2 = new SinkRecord(topicName, 1, null, null, valueSchema, value2, 0)
+    val record1 = new SinkRecord(topicName, 1, SchemaBuilder.struct.build, "key", valueSchema, value1, 0)
+    val record2 = new SinkRecord(topicName, 1, SchemaBuilder.struct.build, "key", valueSchema, value2, 0)
 
     sinkTask.put(List(record1, record2).asJavaCollection)
 
     sinkTask.stop()
 
-    val cluster = Cluster.builder().addContactPoint(DefaultHost).build()
-    val session = cluster.connect()
-    val result = session.execute(s"select count(1) from ${tableName}").one()
+    val session = CassandraCluster.local.connect
+    val result = session.execute(s"select count(1) from $tableName").one()
     val rowCount = result.getLong(0)
     rowCount should be(2)
   }

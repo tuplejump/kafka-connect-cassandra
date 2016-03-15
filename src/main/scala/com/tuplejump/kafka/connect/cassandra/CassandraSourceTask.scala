@@ -19,71 +19,105 @@ package com.tuplejump.kafka.connect.cassandra
 import java.util.{List => JList, Map => JMap, ArrayList => JArrayList}
 
 import scala.collection.JavaConverters._
-import com.datastax.driver.core.{Row, Cluster, Session}
-import org.apache.kafka.connect.data.{Schema, Struct}
+import org.apache.kafka.connect.connector.Task
 import org.apache.kafka.connect.source.{SourceRecord, SourceTask}
+import org.apache.kafka.connect.data.{Schema, SchemaBuilder, Struct, Timestamp}
+import org.apache.kafka.connect.errors.DataException
+import com.datastax.driver.core.DataType.{Name => CQLType}
+import com.datastax.driver.core.{ColumnDefinitions, Row}
 
-class CassandraSourceTask extends SourceTask {
+/* TODO 1. Check if a task can query multiple tables
+        2. Add batch max and handling (see config)
+        3. Partition and offset - Map("db" -> "database_name","table" -> "table_name")
+        4. Incorporate CDC to stream changes when done. */
+class CassandraSourceTask extends SourceTask with TaskLifecycle {
 
-  import CassandraConnectorConfig._
+  import CassandraSourceTask._, Configuration._
 
-  private var _session: Option[Session] = None
-  private var configProperties: JMap[String, String] = Map.empty[String, String].asJava
+  private implicit var partitions: JMap[String, String] = Map.empty[String, String].asJava
 
-  //This has been exposed to be used while testing only
-  private[cassandra] def getSession = _session
+  def taskClass: Class[_ <: Task] = classOf[CassandraSourceTask]
 
-  //TODO figure out what should be sourcePartition and sourceOffset
-  /*From SourceTask it should be something like -Map("db" -> "database_name","table" -> "table_name").asJava*/
-  private var sourcePartition: JMap[String, String] = Map.empty[String, String].asJava
+  /* Return a new DStream in which each RDD contains all the elements in seen in a
+   * sliding window of time over this DStream.
+   * @param windowDuration width of the window; must be a multiple of this DStream's
+   *                       batching interval
+   * @param slideDuration  sliding interval of the window (i.e., the interval after which
+   *                       the new DStream will generate RDDs); must be a multiple of this
+   *                       DStream's batching interval
+   */
 
-  override def stop(): Unit = {
-    _session.map(_.getCluster.close())
-  }
+  /** Initial implementation only supports bulk load for a query. */
+  override def poll: JList[SourceRecord] = {
+    import System.{ currentTimeMillis => timestamp }
 
-  override def poll(): JList[SourceRecord] = {
+    var result: JList[SourceRecord] = new JArrayList[SourceRecord]()
+    val offset = Map.empty[String, Any].asJava //TODO
 
-    val userQuery = configProperties.get(CassandraConnectorConfig.Query) //this property should be there. validation is done prior to starting a CassandraSource
-    val query = (userQuery.contains(PreviousTime) || userQuery.contains(CurrentTime)) match {
-        case true =>
-          val pollInterval = Option(configProperties.get(PollInterval).toLong).getOrElse(DefaultPollInterval)
-          //TODO remove Thread.sleep to control poll Interval
-          Thread.sleep(pollInterval)
-          val now = System.currentTimeMillis()
-          val timestamp = now - pollInterval
-          userQuery.replaceAll(PreviousTime, s"$timestamp").replaceAll(CurrentTime, s"$now")
-        case _ => userQuery
+    def read(source: SourceConfig): Unit =
+      for (row <- session.execute(source.query).iterator.asScala) {
+        val record = convert(row, offset, source.topic)
+        result.add(record)
       }
 
-    getSourceRecords(query)
-  }
+    /* This property exists - validation is done prior to starting a CassandraSource. */
+    configuration.source foreach {
+      case source if source.timeseries =>
+        //TODO remove https://github.com/tuplejump/kafka-connector/issues/9
+        Thread.sleep(source.pollInterval)
 
-  private def getSourceRecords(query: String): JList[SourceRecord] = {
-    var result: JList[SourceRecord] = new JArrayList[SourceRecord]()
-    _session match {
-      case Some(session) =>
-        val resultSet = session.execute(query)
-        while (!resultSet.isExhausted) {
-          val row: Row = resultSet.one()
-          //TODO check if a task can query multiple tables
-          val schema: Schema = DataConverter.columnDefToSchema(row.getColumnDefinitions)
-          val valueStruct: Struct = DataConverter.rowToStruct(schema, row)
-          val sinkRecord = new SourceRecord(sourcePartition, null, configProperties.get(Topic), schema, valueStruct)
-          result.add(sinkRecord)
-        }
-        result
-      case None =>
-        throw new CassandraConnectorException("Failed to get cassandra session.")
+        source slide timestamp
+        read(source)
+      case source =>
+        read(source)
     }
-  }
 
-  override def start(props: JMap[String, String]): Unit = {
-    configProperties = props
-    val host = configProperties.getOrDefault(HostConfig, DefaultHost)
-    val port = configProperties.getOrDefault(PortConfig, DefaultPort).toInt
-    val cluster = Cluster.builder().addContactPoint(host).withPort(port)
-    _session = Some(cluster.build().connect())
+    result
   }
-
-  override def version(): String = CassandraConnectorInfo.version
 }
+
+/** INTERNAL API. */
+private[kafka] object CassandraSourceTask {
+
+  import Configuration._
+
+  def convert(row: Row, offset: JMap[String, Any], topic: TopicName)
+             (implicit partitions: JMap[String, String]): SourceRecord = {
+    val schema = fieldsSchema(row.getColumnDefinitions)
+    val struct = valueStruct(schema, row)
+    new SourceRecord(partitions, offset, topic, schema, struct)
+  }
+
+  def fieldsSchema(columns: ColumnDefinitions): Schema = {
+    val builder = SchemaBuilder.struct
+
+    for (column <- columns.asList.asScala) builder.field(column.getName, fieldType(column))
+
+    builder.build()
+  }
+
+  def valueStruct(schema: Schema, row: Row): Struct = {
+    val struct: Struct = new Struct(schema)
+
+    for (field <- schema.fields.asScala) {
+      val colName: String = field.name
+      struct.put(colName, row.getObject(colName))
+    }
+
+    struct
+  }
+
+  private def fieldType(column: ColumnDefinitions.Definition): Schema =
+    column.getType.getName match {
+      case CQLType.ASCII | CQLType.VARCHAR | CQLType.TEXT => Schema.STRING_SCHEMA
+      case CQLType.BIGINT | CQLType.COUNTER => Schema.INT64_SCHEMA
+      case CQLType.BOOLEAN => Schema.BOOLEAN_SCHEMA
+      case CQLType.DECIMAL | CQLType.DOUBLE => Schema.FLOAT64_SCHEMA
+      case CQLType.FLOAT => Schema.FLOAT32_SCHEMA
+      case CQLType.INT => Schema.INT32_SCHEMA
+      case CQLType.TIMESTAMP => Timestamp.SCHEMA
+      case CQLType.VARINT => Schema.INT64_SCHEMA
+      case other => throw new DataException(s"Querying for type $other is not supported")
+    }
+}
+
