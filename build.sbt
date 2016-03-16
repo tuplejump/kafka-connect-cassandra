@@ -41,12 +41,24 @@ import com.github.hochgi.sbt.cassandra._
 
 CassandraPlugin.cassandraSettings
 
-test in IntegrationTest <<= stopCassandra.dependsOn(test in IntegrationTest).dependsOn(startCassandra)
-testOnly in IntegrationTest <<= (testOnly in IntegrationTest).dependsOn(startCassandra)//todo stop after testOnly
-
 cassandraVersion := cassandra
 cassandraStartDeadline := 40
 cassandraCqlInit := "src/it/resources/setup.cql"
+
+
+test in IntegrationTest <<= (test in IntegrationTest).dependsOn(startCassandra)
+testOnly in IntegrationTest <<= (testOnly in IntegrationTest).dependsOn(startCassandra)
+
+//sbt-cassandra plugin adds these to Test configuration but not to IntegrationTest config
+// https://github.com/hochgi/sbt-cassandra-plugin/issues/5
+//if compilation of test classes fails, cassandra should not be invoked. (moreover, Test.Cleanup won't execute to stop it...)
+startCassandra <<= startCassandra.dependsOn(compile in IntegrationTest)
+//make sure to Stop cassandra when tests are done.
+testOptions in IntegrationTest <+= (cassandraPid, stopCassandraAfterTests, cleanCassandraAfterStop, target) map {
+  case (pid, stop, clean, targetDir) => Tests.Cleanup(() => {
+    if(stop) stopCassandraMethod(clean, targetDir / "data", pid)
+  })
+}
 
 /* TODO
 Found intransitive dependency (org.apache.cassandra:apache-cassandra:3.0.0) while publishMavenStyle is true,
