@@ -25,7 +25,7 @@ import org.apache.kafka.common.config.ConfigException
 import org.apache.kafka.connect.errors.ConnectException
 import org.apache.kafka.connect.sink.SinkConnector
 
-/** Cassandra [[SinkConnector]] data flow: a Kafka source
+/** Cassandra `SinkConnector` data flow: a Kafka source
   * to a Cassandra sink.
   */
 class CassandraSink extends SinkConnector with ConnectorLike {

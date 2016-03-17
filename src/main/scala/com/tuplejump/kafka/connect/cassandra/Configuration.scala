@@ -74,7 +74,7 @@ object Configuration {
 
   val Empty = new Configuration(Map.empty, SourceConfig.Empty, Nil)
 
-  /** Returns a new [[com.tuplejump.kafka.connect.cassandra.Configuration]]. */
+  /** Returns a new `Configuration`. */
   def apply(config: immutable.Map[String, String]): Configuration = {
     implicit val c = config
     val source = SourceConfig(config)
