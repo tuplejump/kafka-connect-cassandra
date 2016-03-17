@@ -1,4 +1,4 @@
-# Kafka Connect Cassandra
+# Kafka Connect Cassandra  [![GitHub license](https://img.shields.io/badge/license-Apache%20V2-green.svg)](https://github.com/tuplejump/kafka-connect-cassandra/blob/master/LICENSE) [![Build Status](https://travis-ci.org/tuplejump/kafka-connect-cassandra.svg?branch=master)](https://travis-ci.org/tuplejump/kafka-connect-cassandra?branch=master) 
 Kafka Connect Cassandra Connector. This project includes source/sink connectors.
 
 ## Release Status
