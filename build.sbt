@@ -1,6 +1,6 @@
 name := "kafka-connect-cassandra"
 
-version := "0.0.4"
+version := "0.0.5"
 
 crossScalaVersions := Seq("2.11.7", "2.10.6")
 

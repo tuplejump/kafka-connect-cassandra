@@ -56,3 +56,11 @@ CREATE TABLE githubstats.monthly_commits (
   year INT,
   PRIMARY KEY ((user), year, month)
 ) WITH CLUSTERING ORDER BY (year DESC, month DESC);
+
+CREATE TABLE IF NOT EXISTS test.event_store(
+    app_id text,
+    event_type text,
+    subscription_type text,
+    event_ts timestamp,
+    PRIMARY KEY((app_id, event_type), event_ts)
+    );
