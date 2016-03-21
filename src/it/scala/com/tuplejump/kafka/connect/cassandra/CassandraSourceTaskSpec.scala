@@ -19,8 +19,11 @@
 
 package com.tuplejump.kafka.connect.cassandra
 
-import scala.collection.JavaConverters._
+import java.util.concurrent.TimeUnit
+
 import org.apache.kafka.connect.source.SourceTaskContext
+
+import scala.collection.JavaConverters._
 
 class CassandraSourceTaskSpec extends AbstractFlatSpec {
 
@@ -39,7 +42,7 @@ class CassandraSourceTaskSpec extends AbstractFlatSpec {
     sourceTask.stop()
   }
 
-  it should "fetch records from cassandra" in {
+  it should "fetch records from cassandra in bulk" in {
     val sourceTask = new CassandraSourceTask()
     val mockContext = mock[SourceTaskContext]
 
@@ -53,4 +56,64 @@ class CassandraSourceTaskSpec extends AbstractFlatSpec {
     sourceTask.stop()
   }
 
+  def insertStmt(time: Long): String = {
+    "INSERT INTO test.event_store(app_id,event_type,subscription_type,event_ts) " +
+      s"VALUES ('website','renewal','annual',$time)"
+  }
+
+  it should "fetch only new records from cassandra" in {
+    val timeBasedQuery =
+      """SELECT * FROM test.event_store WHERE app_id='website' AND event_type='renewal'
+        | AND event_ts >= previousTime()""".stripMargin
+
+    val topic = "events"
+    val cassandraSourceConfig = sourceConfig(timeBasedQuery, topic)
+
+    val sourceTask = new CassandraSourceTask()
+    val mockContext = mock[SourceTaskContext]
+
+    sourceTask.initialize(mockContext)
+    sourceTask.start(cassandraSourceConfig.asJava)
+
+    val oneHrAgo = System.currentTimeMillis() - TimeUnit.HOURS.toMillis(1)
+    sourceTask.session.execute(insertStmt(oneHrAgo))
+
+    sourceTask.poll().size() should be(0)
+
+    val oneHrLater = System.currentTimeMillis() + TimeUnit.HOURS.toMillis(1)
+    sourceTask.session.execute(insertStmt(oneHrLater))
+
+    val result = sourceTask.poll()
+
+    result.size() should be(1)
+
+    sourceTask.stop()
+  }
+
+  it should "fetch records from cassandra in given pollInterval" in {
+    val timeBasedQuery =
+      """SELECT * FROM test.event_store WHERE app_id='website' AND event_type='renewal'
+        | AND event_ts >= previousTime() AND event_ts <= currentTime()""".stripMargin
+
+    val topic = "events"
+    val cassandraSourceConfig = sourceConfig(timeBasedQuery, topic)
+
+    val sourceTask = new CassandraSourceTask()
+    val mockContext = mock[SourceTaskContext]
+
+    sourceTask.initialize(mockContext)
+    sourceTask.start(cassandraSourceConfig.asJava)
+
+    val oneHrLater = System.currentTimeMillis() + TimeUnit.HOURS.toMillis(1)
+    sourceTask.session.execute(insertStmt(oneHrLater))
+
+    val fewSecLater = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(2)
+    sourceTask.session.execute(insertStmt(fewSecLater))
+
+    val result = sourceTask.poll()
+
+    result.size() should be(1)
+
+    sourceTask.stop()
+  }
 }

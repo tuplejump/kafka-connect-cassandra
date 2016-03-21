@@ -57,8 +57,8 @@ class CassandraSourceTask extends SourceTask with TaskLifecycle {
         //TODO remove https://github.com/tuplejump/kafka-connector/issues/9
         Thread.sleep(source.pollInterval)
 
-        source slide timestamp
-        read(source)
+        val updatedSource = source slide timestamp
+        read(updatedSource)
       case source =>
         read(source)
     }

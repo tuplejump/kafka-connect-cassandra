@@ -31,7 +31,7 @@ import Configuration._
   *
   * TODO CassandraConnectionConfig
   */
-private[kafka] final class Configuration private(val config: immutable.Map[String,String],
+private[kafka] final class Configuration private(val config: immutable.Map[String, String],
                                                  val source: Option[SourceConfig],
                                                  val sink: immutable.List[SinkConfig]) {
 
@@ -70,7 +70,11 @@ object Configuration {
 
   final val PreviousTime = "previousTime()"
 
+  final val PreviousTimeRegex = "previousTime\\(\\)"
+
   final val CurrentTime = "currentTime()"
+
+  final val CurrentTimeRegex = "currentTime\\(\\)"
 
   val Empty = new Configuration(Map.empty, SourceConfig.Empty, Nil)
 
@@ -127,8 +131,9 @@ object Configuration {
     def slide(now: Long): SourceConfig =
       if (timeseries) {
         val timestamp = now - pollInterval
-        copy(query = query.replaceAll(PreviousTime, s"$timestamp")
-          .replaceAll(CurrentTime, s"$now"))
+        val updatedQuery: Query = query.replaceAll(PreviousTimeRegex, s"$timestamp")
+          .replaceAll(CurrentTimeRegex, s"$now")
+        copy(query = updatedQuery)
       } else this
 
     def timeseries: Boolean =
@@ -140,20 +145,20 @@ object Configuration {
 
     val Empty = SourceConfig(Map.empty)
 
-    def apply(config: Map[String,String]): Option[SourceConfig] =
+    def apply(config: Map[String, String]): Option[SourceConfig] =
       for {
         topic <- get(config, TopicKey)
         query <- get(config, QueryKey)
       } yield SourceConfig(topic, query, pollInterval(config), None, None)
 
-    private def pollInterval(config: Map[String,String]): Long =
+    private def pollInterval(config: Map[String, String]): Long =
       get(config, PollInterval).map(_.toLong).getOrElse(DefaultPollInterval)
   }
 
   /** A Kafka [[CassandraSink]] and [[CassandraSinkTask]] configuration.
     * INTERNAL API.
     *
-    * @param topic the kafka `topic` name
+    * @param topic     the kafka `topic` name
     * @param namespace the cassandra `keyspace.table`
     */
   private[kafka] final case class SinkConfig(val topic: TopicName,
@@ -218,7 +223,7 @@ object Configuration {
     val ConsistencyLevelKey = "cassandra.output.consistency.level"
     val DefaultConsistencyLevel = ConsistencyLevel.LOCAL_QUORUM
 
-    /**  The maximum total size of the batch in bytes. Overridden by BatchSizeRowsParam. */
+    /** The maximum total size of the batch in bytes. Overridden by BatchSizeRowsParam. */
     val BatchSizeBytesKey = "cassandra.output.batch.size.bytes"
     val BatchBufferSize = 1024
 
@@ -227,4 +232,5 @@ object Configuration {
     val DefaultParallelismLevel = "5"
 
   }
+
 }
