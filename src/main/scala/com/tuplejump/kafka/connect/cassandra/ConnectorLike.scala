@@ -24,6 +24,7 @@ import scala.util.control.NonFatal
 import org.apache.kafka.connect.connector.Task
 import org.apache.kafka.common.config.ConfigException
 import com.datastax.driver.core.Session
+import org.apache.kafka.connect.errors.ConnectException
 
 /** INTERNAL API. */
 private[kafka] trait ConnectorLike extends Logging {
@@ -72,8 +73,9 @@ private[kafka] trait TaskLifecycle extends Task with ConnectorLike {
 
   protected var _session: Option[Session] = None
 
-  private[cassandra] def session: Session = _session.getOrElse(throw new IllegalStateException(
-    "Sink has not been started yet or is not configured properly to connect to a cluster."))
+  private[cassandra] def session: Session = _session.getOrElse(throw new ConnectException(
+    s"""Failed to connect to a Cassandra cluster.
+       |${this.getClass.getName} has not been started yet or is not configured properly.""".stripMargin))
 
   def taskClass: Class[_ <: Task]
 
@@ -86,7 +88,7 @@ private[kafka] trait TaskLifecycle extends Task with ConnectorLike {
       cluster = Some(_cluster)
     } catch {
       case NonFatal(e) =>
-        logger.info("Unable to start CassandraSinkConnector, shutting down.", e)
+        logger.info(s"Unable to start ${this.getClass.getName}, shutting down.", e)
         _cluster.shutdown()
     }
   }

@@ -1,6 +1,6 @@
 name := "kafka-connect-cassandra"
 
-version := "0.0.5"
+version := "0.0.6"
 
 crossScalaVersions := Seq("2.11.7", "2.10.6")
 
@@ -9,6 +9,8 @@ crossVersion := CrossVersion.binary
 scalaVersion := sys.props.getOrElse("scala.version", crossScalaVersions.value.head)
 
 organization := "com.tuplejump"
+
+organizationHomepage := Some(new java.net.URL("http://www.tuplejump.com"))
 
 description := "A Kafka Connect Cassandra Source and Sink connector."
 
@@ -37,35 +39,7 @@ libraryDependencies ++= Seq(
   }
 )
 
-import com.github.hochgi.sbt.cassandra._
-
-CassandraPlugin.cassandraSettings
-
-cassandraVersion := cassandra
-cassandraStartDeadline := 40
-cassandraCqlInit := "src/it/resources/setup.cql"
-
-
-test in IntegrationTest <<= (test in IntegrationTest).dependsOn(startCassandra)
-testOnly in IntegrationTest <<= (testOnly in IntegrationTest).dependsOn(startCassandra)
-
-//sbt-cassandra plugin adds these to Test configuration but not to IntegrationTest config
-// https://github.com/hochgi/sbt-cassandra-plugin/issues/5
-//if compilation of test classes fails, cassandra should not be invoked. (moreover, Test.Cleanup won't execute to stop it...)
-startCassandra <<= startCassandra.dependsOn(compile in IntegrationTest)
-//make sure to Stop cassandra when tests are done.
-testOptions in IntegrationTest <+= (cassandraPid, stopCassandraAfterTests, cleanCassandraAfterStop, target) map {
-  case (pid, stop, clean, targetDir) => Tests.Cleanup(() => {
-    if(stop) stopCassandraMethod(clean, targetDir / "data", pid)
-  })
-}
-
-/* TODO
-Found intransitive dependency (org.apache.cassandra:apache-cassandra:3.0.0) while publishMavenStyle is true,
-but Maven repositories do not support intransitive dependencies. Use exclusions instead so transitive dependencies
-will be correctly excluded in dependent projects.
- */
-publishMavenStyle := false
+publishMavenStyle := true
 
 /* Compiler settings and checks, code checks and compliance: */
 cancelable in Global := true
@@ -120,7 +94,7 @@ lazy val testOptionsSettings = Tests.Argument(TestFrameworks.ScalaTest, "-oDF")
 lazy val testConfigSettings = inConfig(Test)(Defaults.testTasks) ++
   inConfig(IntegrationTest)(Defaults.itSettings)
 
-lazy val testSettings = testConfigSettings ++ cassandraSettings ++ Seq(
+lazy val testSettings = testConfigSettings ++ Seq(
   fork in IntegrationTest := false,
   fork in Test := true,
   parallelExecution in IntegrationTest := false,
@@ -156,12 +130,34 @@ pomExtra :=
       </developer>
     </developers>
 
-lazy val root = (project in file(".")).settings(
-    buildInfoKeys := Seq[BuildInfoKey](version),
-    buildInfoPackage := "com.tuplejump.kafka.connect.cassandra",
-    buildInfoObject := "CassandraConnectorInfo")
-  .settings(testSettings)
+publishTo <<= version {
+  (v: String) =>
+    val nexus = "https://oss.sonatype.org/"
+    if (v.trim.endsWith("SNAPSHOT"))
+      Some("snapshots" at nexus + "content/repositories/snapshots")
+    else
+      Some("releases" at nexus + "service/local/staging/deploy/maven2")
+}
+
+publishArtifact in Test := false
+
+pomIncludeRepository := {
+  _ => false
+}
+
+pomIncludeRepository := { _ => false }
+
+lazy val root = (project in file("."))
   .enablePlugins(BuildInfoPlugin)
   .enablePlugins(AutomateHeaderPlugin)
+  .enablePlugins(CassandraITPlugin)
+  .settings(
+    buildInfoKeys := Seq[BuildInfoKey](version),
+    buildInfoPackage := "com.tuplejump.kafka.connect.cassandra",
+    buildInfoObject := "CassandraConnectorInfo",
+    cassandraVersion := cassandra,
+    cassandraCqlInit := "src/it/resources/setup.cql",
+    cassandraStartDeadline := 40
+  )
+  .settings(testSettings)
   .configs(IntegrationTest)
-
