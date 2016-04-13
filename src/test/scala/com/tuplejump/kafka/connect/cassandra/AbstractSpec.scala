@@ -62,7 +62,7 @@ trait ConfigFixture extends {
 
     val route = Route(TaskConfig.SinkRoute + topic, s"$keyspace.$table").get
     val schema = Schema(route, Nil, Nil, Nil, columnNames, "")
-    SinkConfig(schema, PreparedQuery(schema), WriteOptions(DefaultSinkConsistency))
+    SinkConfig(schema, PreparedQuery(schema), WriteOptions(DefaultSinkConsistency, DefaultFieldMapping))
   }
 }
 

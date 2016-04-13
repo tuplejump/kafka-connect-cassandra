@@ -26,6 +26,13 @@ CREATE TABLE IF NOT EXISTS test.kv (
   value int,
   PRIMARY KEY (key));
 
+CREATE TABLE IF NOT EXISTS test.fieldmap (
+  new_key text,
+  new_value int,
+  new_nested text,
+  new_dnested text,
+  PRIMARY KEY (new_key));
+
 CREATE TABLE test.playlists (
   id bigint,
   song_order int,

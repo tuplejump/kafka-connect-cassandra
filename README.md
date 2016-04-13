@@ -84,7 +84,8 @@ All the others (BLOB, INET, UUID, TIMEUUID, LIST, SET, MAP, CUSTOM, UDT, TUPLE, 
 
 ## CassandraSink
 It stores Kafka SinkRecord in Cassandra tables. Currently, we only support STRUCT type in the SinkRecord. 
-The STRUCT can have multiple fields with primitive fieldtypes. We assume one-to-one mapping between the column names in the Cassandra sink table and the field names.
+The STRUCT can have multiple fields with primitive fieldtypes. 
+By default, we assume one-to-one mapping between the column names in the Cassandra sink table and the field names.
 
 Say, the SinkRecords has the following STRUCT value
 ```
@@ -96,6 +97,23 @@ Say, the SinkRecords has the following STRUCT value
 ```
 
 Then the Cassandra table should have the columns - id, username, text  
+
+We also support specifying the field name mapping to column names, using the property `cassandra.sink.field.mapping`
+Say, the SinkRecords has the following STRUCT value
+```
+{
+    'id': 1,
+    'user': {
+        'id': 123,
+        'name': 'Foo',
+        'email': 'foo@bar.com'
+    },
+    'text': 'This is my first tweet'
+}
+``` 
+and the `cassandra.sink.field.mapping` has the value `{'id': 'id', 'user': {'id': 'uid', 'name': 'username'}, 'text': 'tweet_text'}`
+Then the Cassandra table should have the columns - id, uid, username, tweet_text. 
+Note that since we did not specify any mapping for 'user.email', it is ignored and not inserted in the Cassandra Sink table.
 
 Note: The library does not create the Cassandra tables - users are expected to create those before starting the sink
 
@@ -132,6 +150,7 @@ Refer `examples/config` for sample configuration files
 |--------           |----------------------------|-----------------------|
 | cassandra.sink.route.\<topic_name\> | The table to write the SinkRecords to, \<keyspace\>.\<tableName\> | |
 | cassandra.sink.consistency | The consistency level for writes to Cassandra. | LOCAL_QUORUM |
+| cassandra.sink.field.mapping | The JSON String mapping field names to column names. | |
 
 
 ## Building from Source

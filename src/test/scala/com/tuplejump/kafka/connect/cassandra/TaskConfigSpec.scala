@@ -67,7 +67,8 @@ class TaskConfigSpec extends AbstractSpec {
       config.source.isEmpty should be (true)
       val consistency = DefaultSourceConsistency
       sinkSchemas.forall{ schema =>
-        val sc = SinkConfig(schema, PreparedQuery(schema), WriteOptions(DefaultSourceConsistency))
+        val sc = SinkConfig(schema, PreparedQuery(schema),
+            WriteOptions(DefaultSourceConsistency, DefaultFieldMapping))
         config.sink.contains(sc)
       } should be (true)
     }

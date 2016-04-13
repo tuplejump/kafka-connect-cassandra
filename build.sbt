@@ -33,14 +33,16 @@ libraryDependencies ++= Seq(
   "org.joda"               %  "joda-convert"          % "1.8.1",
   "org.scalatest"          %% "scalatest"             % "2.2.6"       % "test,it",
   "org.mockito"            % "mockito-core"           % "2.0.34-beta" % "test,it",
-  "ch.qos.logback"         % "logback-classic"        % "1.1.3"       % "test,it",
-  CrossVersion.partialVersion(scalaVersion.value) match {
-    case Some((2, minor)) if minor < 11 =>
-      "org.slf4j"                  % "slf4j-api"      % "1.7.13"
-    case _ =>
-      "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0"
-  }
-)
+  "ch.qos.logback"         % "logback-classic"        % "1.1.3"       % "test,it"
+) ++ (CrossVersion.partialVersion(scalaVersion.value) match {
+  case Some((2, minor)) if minor < 11 => Seq(
+    "org.slf4j"                  % "slf4j-api"     % "1.7.13"
+  )
+  case _ => Seq(
+    "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0",
+    "org.scala-lang.modules" %% "scala-parser-combinators" % "1.0.4"
+  )
+})
 
 publishMavenStyle := true
 
