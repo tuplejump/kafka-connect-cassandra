@@ -16,68 +16,75 @@
 
 package com.tuplejump.kafka.connect.cassandra
 
-import java.util.{Collection => JCollection, Map => JMap, Date => JDate}
+import java.util.{Collection => JCollection, Map => JMap}
 
-import org.apache.kafka.connect.connector.Task
-
+import scala.util.Try
+import scala.util.control.NonFatal
 import scala.collection.JavaConverters._
 import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.connect.sink.{SinkRecord, SinkTask}
-import org.apache.kafka.connect.errors.{ConnectException, DataException}
-import org.apache.kafka.connect.data.{Schema, Struct, Timestamp}
-import org.apache.kafka.connect.data.Schema.Type._
+import org.apache.kafka.connect.connector.Task
+import org.apache.kafka.connect.errors.ConnectException
+import com.datastax.driver.core.{PreparedStatement, Session}
 
-class CassandraSinkTask extends SinkTask with TaskLifecycle {
-  import CassandraSinkTask._
+/** A Cassandra `SinkTask` run by a Kafka `WorkerSinkTask`. */
+class CassandraSinkTask extends SinkTask with CassandraTask {
+  import InternalConfig._
 
-  def taskClass: Class[_ <: Task] = classOf[CassandraSinkTask]
+  protected val taskClass: Class[_ <: Task] = classOf[CassandraSinkTask]
 
-  override def put(records: JCollection[SinkRecord]): Unit =
-    records.asScala.foreach { record =>
-      configuration.find(record.topic) match {
-        case Some(topic) =>
-          val query = convert(record, topic)
-          session.execute(query)
-        case other =>
-          throw new ConnectException("Failed to get cassandra session.")
+  override def start(taskConfig: JMap[String,String]): Unit = {
+    super.start(taskConfig)
+    /* TODO for (tp <- context.assignment.asScala) */
+  }
+
+  /** Writes records from Kafka to Cassandra asynchronously and non-blocking. */
+  override def put(records: JCollection[SinkRecord]): Unit = {
+    // ensure only those topic schemas configured are attempted to store in C*
+    // TODO handle reconfigure
+    for (sc <- taskConfig.sink) {
+      val byTopic = records.asScala.filter(_.topic == sc.schema.route.topic)
+      write(sc, byTopic)
+    }
+  }
+
+  private def write(sc: SinkConfig, byTopic: Iterable[SinkRecord]): Unit = {
+    // TODO needs ticket: if (byTopic.size > 1) boundWrite(sc, byTopic) else
+      for (record <- byTopic) {
+        val query = record.as(sc.schema.namespace)
+        Try(session.executeAsync(query.cql)) recover { case NonFatal(e) =>
+          throw new ConnectException(
+            s"Error executing ${byTopic.size} records for schema '${sc.schema}'.", e)
+        }
       }
+  }
+
+  // for queries that are executed multiple times, one topic per keyspace.table
+  private def boundWrite(sc: SinkConfig, byTopic: Iterable[SinkRecord]): Unit = {
+    val statement = prepare(session, sc)
+    val futures = for (record <- byTopic) yield {
+      val query = record.as(sc.schema.namespace)
+      try {
+        val bs = statement.bind(query.cql)
+        session.executeAsync(bs)
+      } catch { case NonFatal(e) =>
+        throw new ConnectException(
+          s"Error executing ${byTopic.size} records for schema '${sc.schema}'.", e)
+      }
+    }
+
+    // completed before exiting thread.
+    for (rs <- futures) rs.getUninterruptibly
+  }
+
+  private def prepare(session: Session, sc: SinkConfig): PreparedStatement =
+    try session.prepare(sc.query.cql).setConsistencyLevel(sc.options.consistency) catch {
+      case NonFatal(e) => throw new ConnectException(
+        s"Unable to prepare statement ${sc.query.cql}: ${e.getMessage}", e)
     }
 
   /** This method is not relevant as we insert every received record in Cassandra. */
   override def flush(offsets: JMap[TopicPartition, OffsetAndMetadata]): Unit = ()
 
-}
-
-/** INTERNAL API. */
-private[kafka] object CassandraSinkTask {
-  import Configuration._
-
-  /* TODO: Use keySchema, partition and kafkaOffset
-   TODO: Add which types are currently supported in README */
-  def convert(record: SinkRecord, sink: SinkConfig): Query = {
-    val valueSchema = record.valueSchema
-    val columnNames = valueSchema.fields.asScala.map(_.name).toSet
-    val columnValues = valueSchema.`type`() match {
-      case STRUCT =>
-        val struct: Struct = record.value.asInstanceOf[Struct]
-        columnNames.map(schema(valueSchema, struct, _)).mkString(",")
-      case other =>
-        throw new DataException(
-          s"Unable to create insert statement with unsupported value schema type $other.")
-    }
-    s"INSERT INTO ${sink.namespace}(${columnNames.mkString(",")}) VALUES($columnValues)"
-  }
-
-  /* TODO support all types. */
-  def schema(valueSchema: Schema, result: Struct, col: String): AnyRef =
-    valueSchema.field(col).schema match {
-      case x if x.`type`() == Schema.STRING_SCHEMA.`type`() =>
-        s"'${result.get(col).toString}'"
-      case x if x.name() == Timestamp.LOGICAL_NAME =>
-        val time = Timestamp.fromLogical(x, result.get(col).asInstanceOf[JDate])
-        s"$time"
-      case y =>
-        result.get(col)
-    }
 }

@@ -16,31 +16,14 @@
 
 package com.tuplejump.kafka.connect.cassandra
 
-import java.util.{List => JList, Map => JMap}
-
-import scala.collection.immutable
-import scala.collection.JavaConverters._
 import org.apache.kafka.connect.connector.Task
-import org.apache.kafka.common.config.ConfigException
-import org.apache.kafka.connect.errors.ConnectException
 import org.apache.kafka.connect.source.SourceConnector
 
 /** Cassandra [[SourceConnector]] data flow: a Cassandra
   * source with a Kafka sink.
   */
-class CassandraSource extends SourceConnector with ConnectorLike {
+class CassandraSource extends SourceConnector with CassandraConnector {
 
   override val taskClass: Class[_ <: Task] = classOf[CassandraSourceTask]
 
-  override def taskConfigs(maxTasks: Int): JList[JMap[String, String]] =
-    List.fill(maxTasks)(configuration.config.asJava).asJava
-
-  override def start(props: JMap[String, String]): Unit =
-    try configure(immutable.Map.empty[String, String] ++ props.asScala, taskClass) catch {
-      case e: ConfigException => throw new ConnectException(e)
-    }
-
-  override def stop(): Unit = {
-    logger.warn("Kafka Connect Cassandra is shutting down.")
-  }
 }

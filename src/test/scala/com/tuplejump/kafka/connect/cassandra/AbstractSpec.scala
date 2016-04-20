@@ -16,35 +16,57 @@
 
 package com.tuplejump.kafka.connect.cassandra
 
-import org.apache.kafka.connect.sink.SinkConnector
 import org.scalatest.mock.MockitoSugar
-import org.scalatest.{WordSpec, FlatSpec, Matchers}
+import org.scalatest.{BeforeAndAfterAll, WordSpec, FlatSpec, Matchers}
 
-trait ConfigFixture {
-  import CassandraCluster._,Configuration._
+trait ConfigFixture extends {
+  import InternalConfig._,Types._,TaskConfig._
 
   final val EmptyProperties = Map.empty[String, String]
 
-  protected val commonConfig: Map[String, String] =
-    Map(HostKey -> DefaultHosts, PortKey -> DefaultPort)
+  protected val multipleTopics: String = "test1,test2"
 
-  protected def propertiesWith(topic: String, namespace: String): Map[String, String] =
-    commonConfig ++ Map(topic + TopicKey -> namespace)
+  protected lazy val topicList = multipleTopics.split(TaskConfig.TopicSeparator).toList
 
-  protected def sinkConfig(topics:(String,String)*): Map[String, String] = {
-    val topicS = (for((k,_) <- topics) yield k).mkString(Configuration.TopicSeparator)
-    val topicM = Map(SinkConnector.TOPICS_CONFIG -> topicS)
-    val topicConfig = (for((k,v) <- topics) yield SinkConfig.keyFor(k) -> v).toMap
+  protected lazy val sourceSchemas: List[Schema] =
+    topicList.zipWithIndex.map { case (t,i) =>
+      val route = Route(TaskConfig.SourceRoute + t, s"SELECT * FROM ks$i.table$i").get
+      Schema(route, Nil, Nil, Nil, List("a", "b"), "")
+    }
 
-    commonConfig ++ topicM ++ topicConfig
+  protected lazy val sinkSchemas: List[Schema] =
+    topicList.zipWithIndex.map { case (t,i) =>
+      val route = Route(TaskConfig.SinkRoute + t, s"ks$i.table$i").get
+      Schema(route, Nil, Nil, Nil, List("a", "b"), "")
+    }
+
+  protected lazy val sinkTopicMap = sinkSchemas.map(s => s.route.topic -> s.namespace).toMap
+
+  protected lazy val commonConfig = Map(
+    CassandraCluster.ConnectionHosts -> CassandraCluster.DefaultHosts,
+    CassandraCluster.ConnectionPort -> CassandraCluster.DefaultPort.toString,
+    CassandraCluster.ConnectionConsistency -> CassandraCluster.DefaultConsistency.name
+  )
+
+  protected def sinkProperties(config:Map[String,String] = sinkTopicMap): Map[String, String] =
+    config.map { case (topic,ns) => TaskConfig.SinkRoute + topic -> ns} ++ commonConfig
+
+  protected def sourceProperties(query: String, topic: String): Map[String,String] =
+    commonConfig ++ Map(TaskConfig.SourceRoute + topic -> query)
+
+  protected def sinkConfig(topic: TopicName,
+                           keyspace: KeyspaceName,
+                           table: TableName,
+                           columnNames: List[ColumnName] = Nil): SinkConfig = {
+    import com.tuplejump.kafka.connect.cassandra.Syntax.PreparedQuery
+
+    val route = Route(TaskConfig.SinkRoute + topic, s"$keyspace.$table").get
+    val schema = Schema(route, Nil, Nil, Nil, columnNames, "")
+    SinkConfig(schema, PreparedQuery(schema), WriteOptions(DefaultSinkConsistency))
   }
-
-  protected def sourceConfig(query: String, topic: String): Map[String,String] =
-    commonConfig ++ Map(
-      Configuration.QueryKey -> query,
-      Configuration.TopicKey -> topic)
 }
 
-trait AbstractSpec extends WordSpec with Matchers with ConfigFixture
+trait AbstractSpec extends WordSpec with Matchers with BeforeAndAfterAll with ConfigFixture
 
-trait AbstractFlatSpec extends FlatSpec with Matchers with ConfigFixture with MockitoSugar
+trait AbstractFlatSpec extends FlatSpec with Matchers with BeforeAndAfterAll
+  with ConfigFixture with MockitoSugar

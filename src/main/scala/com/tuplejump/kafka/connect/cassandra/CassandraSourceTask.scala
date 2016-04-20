@@ -18,97 +18,69 @@ package com.tuplejump.kafka.connect.cassandra
 
 import java.util.{List => JList, Map => JMap, ArrayList => JArrayList}
 
-import scala.collection.JavaConverters._
 import org.apache.kafka.connect.connector.Task
 import org.apache.kafka.connect.source.{SourceRecord, SourceTask}
-import org.apache.kafka.connect.data.{Schema, SchemaBuilder, Struct, Timestamp}
-import org.apache.kafka.connect.errors.DataException
-import com.datastax.driver.core.DataType.{Name => CQLType}
-import com.datastax.driver.core.{ColumnDefinitions, Row}
 
-/* TODO 1. Check if a task can query multiple tables
-        2. Add batch max and handling (see config)
-        3. Partition and offset - Map("db" -> "database_name","table" -> "table_name")
-        4. Incorporate CDC to stream changes when done. */
-class CassandraSourceTask extends SourceTask with TaskLifecycle {
+/** A Cassandra `SourceTask` run by a Kafka `WorkerSourceTask`.
+  * In a Cassandra source task, the query may be selected column reads
+  * of pre-aggregated data vs reflect all columns in the table schema.
+  */
+class CassandraSourceTask extends SourceTask with CassandraTask {
+  import InternalConfig._
 
-  import CassandraSourceTask._, Configuration._
+  //until CDC, only for ranges. not using yet, coming next PR.
+  private var checkpoint: Option[Any] = None
 
-  private implicit var partitions: JMap[String, String] = Map.empty[String, String].asJava
+  private var partitions = new JArrayList[JMap[String, String]]()
 
-  def taskClass: Class[_ <: Task] = classOf[CassandraSourceTask]
+  protected final val taskClass: Class[_ <: Task] = classOf[CassandraSourceTask]
 
-  /** Initial implementation only supports bulk load for a query. */
+  override def start(taskConfig: JMap[String, String]): Unit = {
+    super.start(taskConfig)
+    //TODO context.offsetStorageReader.offsets(partitions)
+  }
+
+  /** Returns a list of records when available by polling this SourceTask
+    * for new records. From the kafka doc: "This method should block if
+    * no data is currently available."
+    *
+    * Initial implementation only supports bulk load for a query.
+    */
   override def poll: JList[SourceRecord] = {
-    import System.{ currentTimeMillis => timestamp }
 
-    var result: JList[SourceRecord] = new JArrayList[SourceRecord]()
-    val offset = Map.empty[String, Any].asJava //TODO
+    val records = new JArrayList[SourceRecord]()
+    val offset = EmptyJMap//context.offsetStorageReader.offset(EmptyJMap) //TODO
+    val partition = EmptyJMap //TODO
 
-    def read(source: SourceConfig): Unit =
-      for (row <- session.execute(source.query).iterator.asScala) {
-        val record = convert(row, offset, source.topic)
-        result.add(record)
-      }
-
-    /* This property exists - validation is done prior to starting a CassandraSource. */
-    configuration.source foreach {
-      case source if source.timeseries =>
-        //TODO remove https://github.com/tuplejump/kafka-connector/issues/9
-        Thread.sleep(source.pollInterval)
-
-        val updatedSource = source slide timestamp
-        read(updatedSource)
-      case source =>
-        read(source)
+    for {
+      sc       <- taskConfig.source
+      iterator <- page(sc)
+      row      <- iterator
+    } {
+      val record = row.as(sc.schema.route.topic, partition, offset)
+      records.add(record)
+      if (iterator.done) checkpoint = None //TODO
+      record
     }
 
-    result
+    records
+  }
+
+  private def page(sc: SourceConfig): Option[AsyncPagingSourceIterator] = {
+    //TODO need CDC: https://github.com/tuplejump/kafka-connector/issues/9
+    val query = sc.query match {
+      case q if q.hasPatternT =>
+        //TODO remove Thread.sleep with better option like timestamp.fromNow...etc
+        Thread.sleep(sc.query.pollInterval)
+        sc.query.slide
+      case q =>
+        // TODO typed: https://tuplejump.atlassian.net/browse/DB-56 timeuuid,timestamp...
+        // by type: WHERE {columnToMove} > checkpoint.value with columnType
+        sc.query
+    }
+
+    val rs = session.execute(query.cql)
+    if (rs.getAvailableWithoutFetching > 0) Some(new AsyncPagingSourceIterator(rs, sc.options.fetchSize))
+    else None
   }
 }
-
-/** INTERNAL API. */
-private[kafka] object CassandraSourceTask {
-
-  import Configuration._
-
-  def convert(row: Row, offset: JMap[String, Any], topic: TopicName)
-             (implicit partitions: JMap[String, String]): SourceRecord = {
-    val schema = fieldsSchema(row.getColumnDefinitions)
-    val struct = valueStruct(schema, row)
-    new SourceRecord(partitions, offset, topic, schema, struct)
-  }
-
-  def fieldsSchema(columns: ColumnDefinitions): Schema = {
-    val builder = SchemaBuilder.struct
-
-    for (column <- columns.asList.asScala) builder.field(column.getName, fieldType(column))
-
-    builder.build()
-  }
-
-  def valueStruct(schema: Schema, row: Row): Struct = {
-    val struct: Struct = new Struct(schema)
-
-    for (field <- schema.fields.asScala) {
-      val colName: String = field.name
-      struct.put(colName, row.getObject(colName))
-    }
-
-    struct
-  }
-
-  private def fieldType(column: ColumnDefinitions.Definition): Schema =
-    column.getType.getName match {
-      case CQLType.ASCII | CQLType.VARCHAR | CQLType.TEXT => Schema.STRING_SCHEMA
-      case CQLType.BIGINT | CQLType.COUNTER => Schema.INT64_SCHEMA
-      case CQLType.BOOLEAN => Schema.BOOLEAN_SCHEMA
-      case CQLType.DECIMAL | CQLType.DOUBLE => Schema.FLOAT64_SCHEMA
-      case CQLType.FLOAT => Schema.FLOAT32_SCHEMA
-      case CQLType.INT => Schema.INT32_SCHEMA
-      case CQLType.TIMESTAMP => Timestamp.SCHEMA
-      case CQLType.VARINT => Schema.INT64_SCHEMA
-      case other => throw new DataException(s"Querying for type $other is not supported")
-    }
-}
-

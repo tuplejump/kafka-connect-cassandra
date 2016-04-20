@@ -16,63 +16,59 @@
 
 package com.tuplejump.kafka.connect.cassandra
 
-import scala.collection.JavaConverters._
-
 class CassandraClusterSpec extends AbstractSpec {
-  import Configuration._
 
   private val inserts = 1000
 
   "CassandraCluster" must {
     "configure a cluster with default settings" in {
-      val cc = CassandraCluster.local
-      val cluster = cc.cluster
-      cc.cluster.getClusterName.nonEmpty should be(true)
-      cluster.isClosed should be(false)
-      cc.shutdown()
-      cluster.isClosed should be(true)
+      val cluster = CassandraCluster.local
+      val session = cluster.session
+      session.isClosed should be(false)
+      cluster.shutdown()
     }
-    "configure a cluster with valid values and handle invalid host failover" in {
-      val config = Map(CassandraCluster.HostKey -> "127.0.0.1,127.0.0.2")
-      val cc = CassandraCluster(config)
-      val cluster = cc.cluster
-      cc.hosts.size should be(2)
-      cc.hosts.head.getHostAddress should be(CassandraCluster.DefaultHosts)
-      cc.shutdown()
-      cluster.isClosed should be(true)
+   "configure a cluster with valid values and handle invalid host failover" in {
+      val config = Map(CassandraCluster.ConnectionHosts -> "127.0.0.1")
+      val cluster = CassandraCluster(config)
+      cluster.seedNodes.size should be(1)
+      val session = cluster.session
+      cluster.shutdown()
     }
     "handle whitespace in config" in {
-      val cluster = CassandraCluster(Map(CassandraCluster.HostKey -> " 10.2.2.1, 127.0.0.1 "))
-      cluster.hosts.size should be(2)
+      val cluster = CassandraCluster(Map(CassandraCluster.ConnectionHosts -> " 10.2.2.1, 127.0.0.1 "))
+      cluster.seedNodes.size should be(2)
+      val session = cluster.session
+      session.isClosed should be(false)
       cluster.shutdown()
-      cluster.cluster.isClosed should be(true)
     }
     "create, use and destroy a session" in {
 
-      val namespace: QueryNamespace = "githubstats.monthly_commits"
+      val namespace = "githubstats.monthly_commits"
       val users = Map("helena" -> 1000, "shiti" -> 1000, "velvia" -> 800, "milliondreams" -> 2000)
-      val data = for {
+      val columnNames = List("user","commits","year","month")
+      val columns = columnNames.mkString(",")
+
+      val statements = for {
         (user, count) <- users
-        commits <- 0 to count
-        month <- 1 to 12
-      } yield s"INSERT INTO $namespace (user,commits,month,year) values ('$user',$commits,$month,2016)"
+        month         <- 1 to 12
+        commits       <- (500 to count*month).toList
+      } yield s"INSERT INTO $namespace($columns) values('$user',$commits,2016,$month)"
 
       val cluster = CassandraCluster.local
 
       try {
-        val session = cluster.connect
-        data foreach (session.execute)
+        val session = cluster.session
+        statements foreach (q => session.execute(q))
+
+        import scala.collection.JavaConverters._
 
         users foreach { case (usr, commits) =>
-          val results = session.execute(
-            s"SELECT user,COMMITS,month FROM $namespace where user = '$usr'"
-          ).all().asScala
-          results.size should be(12)
-          users.get(usr).foreach(c => results.head.getInt(1) should be(c))
+          val query = s"SELECT * FROM $namespace WHERE user = '$usr'"
+          val results = session.execute(query).all().asScala
+          results.size should be (12)//months
         }
       } finally {
         cluster.shutdown()
-        cluster.isClosed should be(true)
       }
     }
   }

@@ -16,33 +16,75 @@
 
 package com.tuplejump.kafka.connect.cassandra
 
-import org.apache.kafka.common.config.ConfigException
+import com.tuplejump.kafka.connect.cassandra.TaskConfig.TaskStrategy.OneToMany
+import org.apache.kafka.connect.errors.ConnectException
 
-class ConnectorLikeSpec extends AbstractSpec with ConnectorLike {
+abstract class ConnectorLikeSpec extends AbstractSpec with ConnectorLike
+
+class EmptyConnectorLikeSpec extends ConnectorLikeSpec {
   "ConnectorLike" must {
-    "validate and log configuration failure of a CassandraSource on startup" in {
-      an[ConfigException] should be thrownBy {
+    "fail on empty source task config" in {
+      an[ConnectException] should be thrownBy {
         configure(Map.empty[String, String], classOf[CassandraSourceTask])
       }
     }
-    "validate and log valid configuration of a CassandraSource on startup" in {
-      val query = "SELECT * FROM test.playlists"
-      val topic = "test"
-      val config = sourceConfig(query, topic)
-
-      configure(config, classOf[CassandraSourceTask])
-    }
-    "validate and log configuration failure of a CassandraSink on startup" in {
-      an[ConfigException] should be thrownBy {
+    "fail on empty sink task config" in {
+      an[ConnectException] should be thrownBy {
         configure(Map.empty[String, String], classOf[CassandraSinkTask])
       }
     }
-    "validate and log valid configuration of a CassandraSink on startup" in {
-      val topicName = "test_kv_topic"
-      val tableName = "test.kv"
-      val config = sinkConfig((topicName, tableName))
+    "fail on source task config with no route mappings" in {
+      an[ConnectException] should be thrownBy {
+        configure(commonConfig, classOf[CassandraSourceTask])
+      }
+    }
+    "fail on sink task config with no route mappings" in {
+      an[ConnectException] should be thrownBy {
+        configure(commonConfig, classOf[CassandraSinkTask])
+      }
+    }
+  }
+}
 
-      configure(config, classOf[CassandraSinkTask])
+class SourceConnectorLikeSpec extends ConnectorLikeSpec {
+  "A Source ConnectorLike" must {
+    "validate configuration on startup" in {
+      val query = "SELECT * FROM music.playlists"
+      val topic = "playlists"
+      configure(sourceProperties(query, topic), source)
+      configT.nonEmpty should be (true)
+      configT.keySet.exists(_.contains("cassandra.connection")) should be (true)
+      configT.keySet.exists(_.contains("cassandra.source")) should be (true)
+      configT.keySet.exists(_.contains("cassandra.sink")) should be (false)
+
+      taskStrategy should === (TaskConfig.TaskStrategy.OneToOne)
+      routes.size should be (1)
+      val route = routes.head
+      route.topic should ===("playlists")
+      route.keyspace should be ("music")
+      route.table should be ("playlists")
+      route.query should be (Some(query))
+    }
+  }
+}
+
+class SinkConnectorLikeSpec extends AbstractSpec with ConnectorLike {
+
+  protected def withOneToMany(config:Map[String,String]): Map[String,String] =
+    commonConfig ++ config ++ Map(TaskConfig.TaskParallelismStrategy -> OneToMany.key)
+
+  "A Sink ConnectorLike" must {
+    "validate configuration on startup" in {
+      val props = withOneToMany(sinkProperties(sinkTopicMap))
+      configure(props, sink)
+      configT.nonEmpty should be (true)
+      configT.keySet.exists(_.contains("cassandra.connection")) should be (true)
+      configT.keySet.exists(_.contains("cassandra.task")) should be (true)
+      configT.keySet.exists(_.contains("cassandra.sink")) should be (true)
+      configT.keySet.exists(_.contains("cassandra.source")) should be (false)
+
+      routes.size should be (2)
+      taskStrategy should ===(TaskConfig.TaskStrategy.OneToMany)
     }
   }
 }
