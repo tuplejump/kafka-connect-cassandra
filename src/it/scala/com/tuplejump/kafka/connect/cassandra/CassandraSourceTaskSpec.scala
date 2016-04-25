@@ -29,68 +29,69 @@ class CassandraSourceTaskSpec extends AbstractFlatSpec {
   val topic = "test"
   val config = sourceProperties(query, topic)
 
- it should "start source task" in {
-    val sourceTask = new CassandraSourceTask()
-    val mockContext = mock[SourceTaskContext]
-
-    sourceTask.initialize(mockContext)
-
-    sourceTask.start(config.asJava)
-    Option(sourceTask.session).isDefined should be(true)
-    sourceTask.stop()
-  }
-
-  it should "fetch records from cassandra in bulk" in {
-    val sourceTask = new CassandraSourceTask()
-    val mockContext = mock[SourceTaskContext]
-
-    sourceTask.initialize(mockContext)
-    sourceTask.start(config.asJava)
-
-    val result = sourceTask.poll()
-
-    result.size() should be(4)
-
-    sourceTask.stop()
-  }
-
   def insertStmt(time: Long): String = {
     "INSERT INTO test.event_store(app_id,event_type,subscription_type,event_ts) " +
       s"VALUES ('website','renewal','annual',$time)"
   }
 
-  it should "fetch only new records from cassandra" in {
-    val timeFunctionQuery =
-      "SELECT * FROM test.event_store " +
-        "WHERE app_id='website' AND event_type='renewal' " +
-        "AND event_ts >= previousTime()"
+  it should "start source task" in {
+     val sourceTask = new CassandraSourceTask()
+     val mockContext = mock[SourceTaskContext]
 
-    val config = sourceProperties(timeFunctionQuery, "events")
+     sourceTask.initialize(mockContext)
 
-    val sourceTask = new CassandraSourceTask()
-    val mockContext = mock[SourceTaskContext]
+     sourceTask.start(config.asJava)
+     Option(sourceTask.session).isDefined should be(true)
+     sourceTask.stop()
+   }
 
-    sourceTask.initialize(mockContext)
-    sourceTask.start(config.asJava)
+   it should "fetch records from cassandra in bulk" in {
+     val sourceTask = new CassandraSourceTask()
+     val mockContext = mock[SourceTaskContext]
 
-    val oneHrAgo = System.nanoTime + HOURS.toMillis(1)
-    sourceTask.session.execute(insertStmt(oneHrAgo))
+     sourceTask.initialize(mockContext)
+     sourceTask.start(config.asJava)
 
-    // was sourceTask.poll().size() should be(0)
-    val t1 = sourceTask.poll()
-    //check size and uniqueness, currently not unique and size 1, not 0
+     val result = sourceTask.poll()
 
-    val oneHrLater = System.nanoTime + HOURS.toMillis(1)
-    sourceTask.session.execute(insertStmt(oneHrLater))
+     result.size() should be(4)
 
-    // was sourceTask.poll().size() should be(1)
-    val t2 = sourceTask.poll
-    //check size and uniqueness, currently not unique and size 1, not 0
+     sourceTask.stop()
+   }
 
-    sourceTask.stop()
-  }
 
- /* it should "fetch records from cassandra in given pollInterval" in {
+   it should "fetch only new records from cassandra" in {
+     val timeFunctionQuery =
+       "SELECT * FROM test.event_store " +
+         "WHERE app_id='website' AND event_type='renewal' " +
+         "AND event_ts >= previousTime()"
+
+     val config = sourceProperties(timeFunctionQuery, "events")
+
+     val sourceTask = new CassandraSourceTask()
+     val mockContext = mock[SourceTaskContext]
+
+     sourceTask.initialize(mockContext)
+     sourceTask.start(config.asJava)
+
+     val oneHrAgo = System.nanoTime + HOURS.toMillis(1)
+     sourceTask.session.execute(insertStmt(oneHrAgo))
+
+     // was sourceTask.poll().size() should be(0)
+     val t1 = sourceTask.poll()
+     //check size and uniqueness, currently not unique and size 1, not 0
+
+     val oneHrLater = System.nanoTime + HOURS.toMillis(1)
+     sourceTask.session.execute(insertStmt(oneHrLater))
+
+     // was sourceTask.poll().size() should be(1)
+     val t2 = sourceTask.poll
+     //check size and uniqueness, currently not unique and size 1, not 0
+
+     sourceTask.stop()
+   }
+
+  it should "fetch records from cassandra in given pollInterval" in {
     val timeFunctionQuery =
       """SELECT * FROM test.event_store WHERE app_id='website' AND event_type='renewal'
         | AND event_ts >= previousTime() AND event_ts <= currentTime()""".stripMargin
@@ -101,7 +102,7 @@ class CassandraSourceTaskSpec extends AbstractFlatSpec {
     val mockContext = mock[SourceTaskContext]
 
     sourceTask.initialize(mockContext)
-    sourceTask.start(cassandraSourceConfig.asJava)
+    sourceTask.start(config.asJava)
 
     val oneHrLater = System.currentTimeMillis() + HOURS.toMillis(1)
     sourceTask.session.execute(insertStmt(oneHrLater))
@@ -115,7 +116,7 @@ class CassandraSourceTaskSpec extends AbstractFlatSpec {
 
     sourceTask.stop()
   }
- */
+
   it should "fetch records from cassandra" in {
     val query = "SELECT * FROM test.playlists"
     val topic = "test"
