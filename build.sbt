@@ -1,6 +1,7 @@
+
 name := "kafka-connect-cassandra"
 
-version := "0.0.6"
+version := "0.0.7"
 
 crossScalaVersions := Seq("2.11.7", "2.10.6")
 
@@ -26,14 +27,17 @@ de.heikoseeberger.sbtheader.HeaderPlugin.autoImport.headers := Map(
 lazy val cassandra = sys.props.getOrElse("cassandra.version","3.0.0")//latest: 3.0.4
 
 libraryDependencies ++= Seq(
-  "org.apache.kafka"       % "connect-api"           % "0.9.0.1"     % "provided",
-  "com.datastax.cassandra" % "cassandra-driver-core" % cassandra,   //was: 2.1.9
-  "org.scalatest"          %% "scalatest"            % "2.2.6"       % "test,it",
-  "org.mockito"            % "mockito-core"          % "2.0.34-beta" % "test,it",
-  "ch.qos.logback"         % "logback-classic"       % "1.0.7"       % "test,it",
+  "org.apache.kafka"       % "connect-api"            % "0.9.0.1"     % "provided",
+  "com.datastax.cassandra" % "cassandra-driver-core"  % cassandra,
+  //"com.typesafe.akka"      %% "akka-stream"          % "2.4.2"       % "provided",
+  "joda-time"              %  "joda-time"             % "2.9.3",
+  "org.joda"               %  "joda-convert"          % "1.8.1",
+  "org.scalatest"          %% "scalatest"             % "2.2.6"       % "test,it",
+  "org.mockito"            % "mockito-core"           % "2.0.34-beta" % "test,it",
+  "ch.qos.logback"         % "logback-classic"        % "1.1.3"       % "test,it",
   CrossVersion.partialVersion(scalaVersion.value) match {
     case Some((2, minor)) if minor < 11 =>
-      "org.slf4j"                  % "slf4j-api"     % "1.7.13"
+      "org.slf4j"                  % "slf4j-api"      % "1.7.13"
     case _ =>
       "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0"
   }

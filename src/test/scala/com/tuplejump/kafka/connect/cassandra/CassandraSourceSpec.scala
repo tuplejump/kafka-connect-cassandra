@@ -18,37 +18,72 @@ package com.tuplejump.kafka.connect.cassandra
 
 import scala.collection.JavaConverters._
 import org.apache.kafka.connect.errors.ConnectException
+import com.tuplejump.kafka.connect.cassandra.TaskConfig.TaskStrategy
 
 class CassandraSourceSpec extends AbstractFlatSpec {
 
-  it should "validate configuration" in {
+  private def config(taskStrategy: String) = (commonConfig ++ Map(
+    TaskConfig.TaskParallelismStrategy -> taskStrategy,
+    TaskConfig.SourceRoute + "playlists1" -> "Select * from music.playlists1",
+    TaskConfig.SourceRoute + "playlists2" -> "Select * from music2.playlists2",
+    TaskConfig.SourceRoute + "playlists3" -> "Select * from music.playlists3",
+    TaskConfig.SourceRoute + "playlists4" -> "Select * from music2.playlists4")).asJMap
+
+  it should "validate and fail on invalid CassandraSource configuration" in {
     val cassandraSource = new CassandraSource()
     an[ConnectException] should be thrownBy {
       cassandraSource.start(Map.empty[String, String].asJava)
     }
     an[ConnectException] should be thrownBy {
-      cassandraSource.start(Map(Configuration.QueryKey -> "").asJava)
+      cassandraSource.start(Map("test" -> "").asJava)
     }
     an[ConnectException] should be thrownBy {
-      cassandraSource.start(Map(Configuration.TopicKey -> "test",
-        Configuration.QueryKey -> "").asJava)
+      cassandraSource.start(Map(TaskConfig.SourceRoute + "test" -> "").asJava)
+    }
+    an[ConnectException] should be thrownBy {
+      cassandraSource.start(Map(TaskConfig.SourceRoute -> "query").asJava)
     }
   }
 
-  it should "have taskConfigs" in {
-    val query = "Select * from test.playlists"
-    val topic = "test"
-    val config = sourceConfig(query, topic)
-
+  it should "validate valid configuration of a CassandraSource on startup - one-to-one task strategy" in {
     val cassandraSource = new CassandraSource
-    cassandraSource.start(config.asJava)
+    cassandraSource.start(config(TaskStrategy.OneToOne.key))
 
     var taskConfigs = cassandraSource.taskConfigs(1)
     taskConfigs.size should be(1)
-    taskConfigs.get(0).get(Configuration.QueryKey) should be(query)
-    taskConfigs.get(0).get(Configuration.TopicKey) should be(topic)
+    taskConfigs.asScala forall { map =>
+      map.asScala.filterKeys(_.startsWith(TaskConfig.SourceRoute)).size == 4 &&
+        map.asScala.filterKeys(_.startsWith("cassandra.connection")).size == 3 &&
+        map.asScala.filterKeys(_.startsWith("cassandra.task.parallelism")).size == 1
+    } should be (true)
 
     taskConfigs = cassandraSource.taskConfigs(2)
     taskConfigs.size should be(2)
+    taskConfigs.asScala forall { map =>
+      map.asScala.filterKeys(_.startsWith(TaskConfig.SourceRoute)).size == 2 &&
+        map.asScala.filterKeys(_.startsWith("cassandra.connection")).size == 3 &&
+          map.asScala.filterKeys(_.startsWith("cassandra.task.parallelism")).size == 1
+    }
+  }
+
+  it should "validate valid configuration of a CassandraSource on startup - one-to-many task strategy" in {
+    val cassandraSource = new CassandraSource
+    cassandraSource.start(config(TaskStrategy.OneToMany.key))
+
+    var taskConfigs = cassandraSource.taskConfigs(1)
+    taskConfigs.size should be(1)
+    taskConfigs.asScala forall { map =>
+      map.asScala.filterKeys(_.startsWith(TaskConfig.SourceRoute)).size == 4 &&
+        map.asScala.filterKeys(_.startsWith("cassandra.connection")).size == 3 &&
+        map.asScala.filterKeys(_.startsWith("cassandra.task.parallelism")).size == 1
+    }
+
+    taskConfigs = cassandraSource.taskConfigs(2)
+    taskConfigs.size should be(2)
+    taskConfigs.asScala forall { map =>
+      map.asScala.filterKeys(_.startsWith(TaskConfig.SourceRoute)).size == 2 &&
+        map.asScala.filterKeys(_.startsWith("cassandra.connection")).size == 3 &&
+        map.asScala.filterKeys(_.startsWith("cassandra.task.parallelism")).size == 1
+    }
   }
 }

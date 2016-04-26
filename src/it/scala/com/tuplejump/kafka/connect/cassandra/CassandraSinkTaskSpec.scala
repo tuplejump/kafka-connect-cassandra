@@ -26,7 +26,7 @@ class CassandraSinkTaskSpec extends AbstractFlatSpec {
 
   val topicName = "test_kv_topic"
   val tableName = "test.kv"
-  val config = sinkConfig((topicName, tableName))
+  val config = sinkProperties(Map(topicName -> tableName))
 
   it should "start sink task" in {
     val sinkTask = new CassandraSinkTask()
@@ -34,14 +34,10 @@ class CassandraSinkTaskSpec extends AbstractFlatSpec {
 
     sinkTask.initialize(mockContext)
     sinkTask.start(config.asJava)
-    Option(sinkTask.session).isDefined should be(true)
     sinkTask.stop()
   }
 
   it should "save records in cassandra" in {
-    val topicName = "test_kv_topic"
-    val tableName = "test.kv"
-
     val sinkTask = new CassandraSinkTask()
     val mockContext = mock[SinkTaskContext]
 
@@ -61,10 +57,12 @@ class CassandraSinkTaskSpec extends AbstractFlatSpec {
 
     sinkTask.stop()
 
-    val session = CassandraCluster.local.connect
+    val cc = CassandraCluster.local
+    val session = cc.session
     val result = session.execute(s"select count(1) from $tableName").one()
     val rowCount = result.getLong(0)
     rowCount should be(2)
+    cc.shutdown()
   }
-
 }
+
