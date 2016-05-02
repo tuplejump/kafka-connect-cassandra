@@ -18,6 +18,6 @@ CREATE TABLE IF NOT EXISTS demo.event_store_sink(
     PRIMARY KEY((app_id, event_type), event_ts)
     );
 
-COPY event_store(app_id,event_type,subscription_type,event_ts) FROM 'data.csv' ;
+COPY event_store(app_id,subscription_type,event_type,event_ts) FROM 'data.csv' ;
 
 

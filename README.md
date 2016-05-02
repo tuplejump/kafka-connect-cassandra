@@ -1,27 +1,48 @@
 # Kafka Connect Cassandra  [![GitHub license](https://img.shields.io/badge/license-Apache%20V2-green.svg)](https://github.com/tuplejump/kafka-connect-cassandra/blob/master/LICENSE) [![Build Status](https://travis-ci.org/tuplejump/kafka-connect-cassandra.svg?branch=master)](https://travis-ci.org/tuplejump/kafka-connect-cassandra?branch=master) 
-Kafka Connect Cassandra Connector. This project includes source/sink connectors.
+Kafka Connect Cassandra Connector. This project includes source & sink connectors.
 
 ## Release Status
 Experimental phase.
 
 ## Table of Contents
 
-* [CassandraSink](#cassandrasink)
+* [Usage](#usage)
+* [Running Examples](#running-example)
 * [CassandraSource](#cassandrasource)
     * [Supported CQL Types](#cql-types-supported)
+* [CassandraSink](#cassandrasink)
 * [Configuration](#configuration)
-    * [Sample Configuration](#sample-config)
-        * [Sample Source Config](#sample-source-config)
-        * [Sample Sink Config](#sample-sink-config)
     * [Connect Properties](#connect-properties-for-both-source-and-sink)
     * [Source Connect Properties](#source-connect-properties)
     * [Sink Connect Properties](#sink-connect-properties)
 * [Building From Source](#building-from-source)
 
-## CassandraSink
-It stores Kafka SinkRecord in Cassandra tables. 
+## Usage
+The project can be used in two ways:
 
-Note: The library does not create the Cassandra tables - users are expected to create those before starting the sink
+1. as a library in another project,
+
+   "kafka-connect-cassandra" is published on maven central by Tuplejump. It can be defined as a dependency in the build file.
+   For example, with SBT,
+   
+   ```
+   libraryDependencies += com.tuplejump" %% "kafka-connect-cassandra" % "0.0.7"
+   ```
+
+2. using jar with Kafka Connect
+
+   Download the [jar](http://downloads.tuplejump.com/kafka-connect-cassandra-assembly-0.0.7.jar) and copy it to 'KAFKA_HOME/libs'
+
+## Running Examples
+The example uses CassandraSource and loads data from `demo.event_store`. This data is then saved in another table `demo.event_store_sink` using CassandraSink.
+To run the example, execute `examples/start.sh` in the project directory.
+
+This script starts Cassandra, Zookeper, Kafka Server and then initiates a Kafka Connect command using the Source and Sink Configuration specified in `examples/config`.
+Once the script execution is completed, the data from `demo.event_store` will be available in `demo.event_store_sink`. You can insert a few rows in `demo.event_store` to see this.
+
+To stop the processes started for running the example, execute `examples/stop.sh`
+
+Note: On running the example repeatedly, an error is thrown that topic `demo` already exists but it won't block the execution
 
 ## CassandraSource
 It polls Cassandra with specified query. Using this, data can be fetched from Cassandra in two modes:
@@ -59,36 +80,28 @@ Here, `previousTime()` and `currentTime()` are replaced prior to fetching the da
 | TIMESTAMP | TIMESTAMP |
 | VARINT | INT64 |
 
-All the others (BLOB,INET,UUID,TIMEUUID,LIST,SET,MAP,CUSTOM,UDT,TUPLE,SMALLINT,TINYINT,DATE,TIME) are currently NOT supported.
+All the others (BLOB, INET, UUID, TIMEUUID, LIST, SET, MAP, CUSTOM, UDT, TUPLE, SMALLINT, TINYINT, DATE,TIME) are currently NOT supported.
 
+## CassandraSink
+It stores Kafka SinkRecord in Cassandra tables. Currently, we only support STRUCT type in the SinkRecord. 
+The STRUCT can have multiple fields with primitive fieldtypes. We assume one-to-one mapping between the column names in the Cassandra sink table and the field names.
+
+Say, the SinkRecords has the following STRUCT value
+```
+{
+    'id': 1,
+    'username': 'user1',
+    'text': 'This is my first tweet'
+}
+```
+
+Then the Cassandra table should have the columns - id, username, text  
+
+Note: The library does not create the Cassandra tables - users are expected to create those before starting the sink
 
 ## Configuration
 
-### Sample Config
-
-#### Sample Source Config
-```
-name=cassandra-source-connector
-connector.class=com.tuplejump.kafka.connect.cassandra.CassandraSource
-tasks.max=1
-
-cassandra.connection.host=10.0.0.1
-cassandra.connection.port=9042
-
-cassandra.source.route.topic1=SELECT * FROM userlog ;
-```
-
-#### Sample Sink Config
-```
-name=cassandra-source-connector
-connector.class=com.tuplejump.kafka.connect.cassandra.CassandraSink
-tasks.max=1
-
-cassandra.connection.host=10.0.0.1
-cassandra.connection.port=9042
-
-cassandra.sink.route.topic1=keyspace1.table1
-```
+Refer `examples/config` for sample configuration files
 
 
 ### Connect Properties (for both Source and Sink)
@@ -114,7 +127,6 @@ cassandra.sink.route.topic1=keyspace1.table1
 | cassandra.source.route.\<topic_name\> | The Select Query to get the data. (Refer CassandraSource documentation for more details) | |
 | cassandra.source.poll.interval | Frequency in ms to poll for new data in each table. | 60000 |
 | cassandra.source.fetch.size | Number of CQL rows to fetch in a single round-trip to Cassandra. | 1000 |
-| cassandra.source.timezone (not yet implemented?) | ?? | true |
 ### Sink Connect Properties 
 | name              | description                | default value  |
 |--------           |----------------------------|-----------------------|
@@ -125,10 +137,17 @@ cassandra.sink.route.topic1=keyspace1.table1
 ## Building from Source
 The project requires SBT to build from source. Execute the following command in the project directory,
 
-    sbt assembly
-
+```
+sbt package  
+sbt assembly // to generate the jar with all the dependencies
+```
 This will build against Scala 2.11.7 by default. You can override this with:
 
-    sbt -Dscala.version=2.10.6 assembly
-    
-This will create an assembly jar which can be added to `lib` directory and used with Kafka.
+```
+sbt -Dscala.version=2.10.6 assembly
+```
+
+Or to build against multiple Scala versions,
+``` 
+sbt +package
+```
