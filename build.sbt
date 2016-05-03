@@ -29,7 +29,6 @@ lazy val cassandra = sys.props.getOrElse("cassandra.version","3.0.0")//latest: 3
 libraryDependencies ++= Seq(
   "org.apache.kafka"       % "connect-api"            % "0.9.0.1"     % "provided",
   "com.datastax.cassandra" % "cassandra-driver-core"  % cassandra,
-  //"com.typesafe.akka"      %% "akka-stream"          % "2.4.2"       % "provided",
   "joda-time"              %  "joda-time"             % "2.9.3",
   "org.joda"               %  "joda-convert"          % "1.8.1",
   "org.scalatest"          %% "scalatest"             % "2.2.6"       % "test,it",
@@ -152,6 +151,7 @@ pomIncludeRepository := {
 pomIncludeRepository := { _ => false }
 
 lazy val root = (project in file("."))
+  .configs(IntegrationTest)
   .enablePlugins(BuildInfoPlugin)
   .enablePlugins(AutomateHeaderPlugin)
   .enablePlugins(CassandraITPlugin)
@@ -161,7 +161,9 @@ lazy val root = (project in file("."))
     buildInfoObject := "CassandraConnectorInfo",
     cassandraVersion := cassandra,
     cassandraCqlInit := "src/it/resources/setup.cql",
-    cassandraStartDeadline := 40
+    cassandraStartDeadline := 40,
+    scalacOptions in (Compile, doc) ++= Seq(
+      "-no-link-warnings" // Suppresses problems with Scaladoc @throws links
+    )
   )
   .settings(testSettings)
-  .configs(IntegrationTest)
