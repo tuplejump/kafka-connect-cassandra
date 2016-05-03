@@ -150,6 +150,8 @@ pomIncludeRepository := {
 
 pomIncludeRepository := { _ => false }
 
+homepage := Some(url("https://github.com/tuplejump/kafka-connect-cassandra"))
+
 lazy val root = (project in file("."))
   .configs(IntegrationTest)
   .enablePlugins(BuildInfoPlugin)
