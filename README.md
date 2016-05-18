@@ -26,7 +26,7 @@ The project can be used in two ways:
    For example, with SBT,
    
    ```
-   libraryDependencies += com.tuplejump" %% "kafka-connect-cassandra" % "0.0.7"
+   libraryDependencies += "com.tuplejump" %% "kafka-connect-cassandra" % "0.0.7"
    ```
 
 2. using jar with Kafka Connect
