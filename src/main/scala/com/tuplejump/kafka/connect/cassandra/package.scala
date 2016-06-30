@@ -16,6 +16,8 @@
 
 package com.tuplejump.kafka.connect
 
+import org.apache.kafka.connect.data.Field
+
 /** Common package operations. */
 package object cassandra {
   import java.util.{List => JList, Map => JMap, Date => JDate}
@@ -69,29 +71,87 @@ package object cassandra {
 
   implicit class SinkRecordOps(record: SinkRecord) {
 
-    def as(namespace: String): SinkQuery = {
-      val schema = record.valueSchema
-      val columnNames = schema.asColumnNames
-      val columnValues = schema.`type`() match {
-        case STRUCT =>
-          val struct: Struct = record.value.asInstanceOf[Struct]
-          columnNames.map(convert(schema, struct, _)).mkString(",")
-        case other => throw new DataException(
-          s"Unable to create insert statement with unsupported value schema type $other.")
+    def as(namespace: String, fieldMapping: Map[String, Any]): SinkQuery = {
+      val colNamesVsValues: Map[String, String] = {
+        if (fieldMapping.isEmpty) {
+          toCqlData
+        } else {
+          toCqlData(fieldMapping)
+        }
       }
-      SinkQuery(namespace, columnNames, columnValues)
+      SinkQuery(namespace, colNamesVsValues)
     }
 
+    def toCqlData(): (Map[String, String]) = {
+      val schema = record.valueSchema
+      schema.`type`() match {
+        case STRUCT =>
+          schema.fields.asScala.map { field =>
+            field.name -> convert(schema, record.value.asInstanceOf[Struct], field)
+          }.toMap
+        case other =>
+          throw new DataException(
+            s"Unable to create insert statement with unsupported value schema type $other.")
+      }
+    }
+
+    def toCqlData(fieldMapping: Map[String, Any]): Map[String, String] = {
+      record.valueSchema.`type`() match {
+        case STRUCT =>
+          toColNamesVsValues(record.value.asInstanceOf[Struct], fieldMapping)
+        case other =>
+          throw new DataException(
+            s"Unable to create insert statement with unsupported value schema type $other.")
+      }
+    }
+
+    // scalastyle:off
+    private def toColNamesVsValues(struct: Struct, fieldMapping: Map[String, Any],
+                                   colNameVsValues: Map[String, String] = Map.empty): Map[String, String] = {
+      lazy val exception = new DataException(s"Mismatch between fieldMapping and Schema")
+      var result: Map[String, String] = colNameVsValues
+      struct.schema.fields.asScala.foreach { field =>
+        val fieldMappingValue = fieldMapping.get(field.name)
+        field.schema.`type`() match {
+          case STRUCT =>
+            fieldMappingValue match {
+              case Some(value) =>
+                value match {
+                  case newMap: Map[_, _] =>
+                    result = toColNamesVsValues(struct.get(field).asInstanceOf[Struct],
+                      newMap.asInstanceOf[Map[String, Any]], result)
+                  case _ =>
+                    throw exception
+                }
+              case None =>
+            }
+          case _ =>
+            fieldMappingValue match {
+              case Some(value) =>
+                value match {
+                  case strValue: String =>
+                    result += (strValue -> convert(field.schema, struct, field))
+                  case _ =>
+                    throw exception
+                }
+              case None =>
+            }
+        }
+      }
+      result
+    }
+    // scalastyle:on
+
     /* TODO support all types. */
-    def convert(schema: Schema, result: Struct, col: String): AnyRef =
-      schema.field(col).schema match {
+    def convert(schema: Schema, result: Struct, field: Field): String =
+      field.schema match {
         case x if x.`type`() == Schema.STRING_SCHEMA.`type`() =>
-          s"'${result.get(col).toString}'"
+          s"'${result.get(field).toString}'"
         case x if x.name() == Timestamp.LOGICAL_NAME =>
-          val time = Timestamp.fromLogical(x, result.get(col).asInstanceOf[JDate])
+          val time = Timestamp.fromLogical(x, result.get(field).asInstanceOf[JDate])
           s"$time"
         case y =>
-          result.get(col)
+          String.valueOf(result.get(field))
       }
 
     def asColumnNames: List[ColumnName] =

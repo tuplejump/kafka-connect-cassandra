@@ -18,8 +18,10 @@ package com.tuplejump.kafka.connect.cassandra
 
 import scala.collection.immutable
 import scala.util.control.NonFatal
+import scala.util.parsing.json.JSON
 import org.apache.kafka.common.config.ConfigException
 import org.apache.kafka.connect.connector.Task
+import org.apache.kafka.connect.errors.DataException
 import com.datastax.driver.core.{TableMetadata, ConsistencyLevel}
 import InternalConfig._
 
@@ -123,6 +125,9 @@ object TaskConfig {
   final val SinkConsistency: Key = "cassandra.sink.consistency"
   final val DefaultSinkConsistency = ConsistencyLevel.LOCAL_QUORUM
 
+  final val FieldMapping: Key = "cassandra.sink.field.mapping"
+  final val DefaultFieldMapping = Map.empty[String, String]
+
   /* **** Task config **** */
   final val TaskParallelismStrategy: Key = "cassandra.task.parallelism"
 
@@ -156,6 +161,10 @@ private[cassandra] object InternalConfig {
   def toInt(a: String): Int = a.toInt
   def toLong(a: String): Long = a.toLong
   def toConsistency(a: String): ConsistencyLevel = ConsistencyLevel.valueOf(a)
+  def toMap(a: String): Map[String, Any] = JSON.parseFull(a) collect {
+    case data: Map[_, _] => data.asInstanceOf[Map[String, Any]]
+  } getOrElse(throw new DataException(s"Field mapping type for '$a' is not supported."))
+
 
   /** A Cassandra `keyspace.table` to Kafka topic mapping.
     *
@@ -319,15 +328,21 @@ private[cassandra] object InternalConfig {
   sealed trait ClusterQueryOptions
 
   /** Settings related for individual queries, can be set per keyspace.table. */
-  final case class WriteOptions(consistency: ConsistencyLevel) extends ClusterQueryOptions
+  final case class WriteOptions(consistency: ConsistencyLevel,
+                                fieldMapping: Map[String, Any]) extends ClusterQueryOptions
 
   object WriteOptions {
 
-    def apply(config: Map[String,String]): WriteOptions =
-      WriteOptions(config.valueOr[ConsistencyLevel](
-        SinkConsistency, toConsistency, DefaultSourceConsistency))
+    def apply(config: Map[String, String]): WriteOptions = {
+      WriteOptions(
+        consistency = config.valueOr[ConsistencyLevel](
+          SinkConsistency, toConsistency, DefaultSourceConsistency),
+        fieldMapping = config.valueOr[Map[String, Any]](
+          FieldMapping, toMap, DefaultFieldMapping
+        )
+      )
+    }
   }
-
   /** Settings related for individual queries, can be set per keyspace.table. */
   final case class ReadOptions(splitSize: Int,
                                fetchSize: Int,

@@ -52,7 +52,7 @@ class CassandraSinkTask extends SinkTask with CassandraTask {
   private def write(sc: SinkConfig, byTopic: Iterable[SinkRecord]): Unit = {
     // TODO needs ticket: if (byTopic.size > 1) boundWrite(sc, byTopic) else
       for (record <- byTopic) {
-        val query = record.as(sc.schema.namespace)
+        val query = record.as(sc.schema.namespace, sc.options.fieldMapping)
         Try(session.executeAsync(query.cql)) recover { case NonFatal(e) =>
           throw new ConnectException(
             s"Error executing ${byTopic.size} records for schema '${sc.schema}'.", e)
@@ -64,7 +64,7 @@ class CassandraSinkTask extends SinkTask with CassandraTask {
   private def boundWrite(sc: SinkConfig, byTopic: Iterable[SinkRecord]): Unit = {
     val statement = prepare(session, sc)
     val futures = for (record <- byTopic) yield {
-      val query = record.as(sc.schema.namespace)
+      val query = record.as(sc.schema.namespace, sc.options.fieldMapping)
       try {
         val bs = statement.bind(query.cql)
         session.executeAsync(bs)

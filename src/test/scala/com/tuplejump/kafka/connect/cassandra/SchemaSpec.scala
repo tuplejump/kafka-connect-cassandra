@@ -39,7 +39,7 @@ class SchemaSpec extends AbstractFlatSpec {
     sc.schema.route.table should be ("tablex")
 
     sc.schema is record should be (true)
-    val query = record.as(sc.schema.namespace)
+    val query = record.as(sc.schema.namespace, Map.empty[String, Any])
     query.cql should be("INSERT INTO keyspacex.tablex(id) VALUES(1)")
   }
 
@@ -60,7 +60,7 @@ class SchemaSpec extends AbstractFlatSpec {
     sc.schema is record should be (true)
 
     sc.query.cql should be ("INSERT INTO keyspacex.tablex(available,name,age) VALUES(?,?,?)")
-    val query = record.as(sc.schema.namespace)
+    val query = record.as(sc.schema.namespace, Map.empty[String, Any])
     query.cql should be("INSERT INTO keyspacex.tablex(available,name,age) VALUES(false,'user',15)")
   }
 

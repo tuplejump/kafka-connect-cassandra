@@ -107,9 +107,12 @@ private[cassandra] object Syntax {
       namespace.length >= 3 || namespace.contains(".")
     }
 
-    def apply(namespace: String, columnNames: List[ColumnName], columnValues: String): SinkQuery = {
-      val columns = columnNames.mkString(",")
-      SinkQuery(s"INSERT INTO $namespace($columns) VALUES($columnValues)")
+    def apply(namespace: String, columnNamesVsValues: Map[ColumnName, String]): SinkQuery = {
+      val query = columnNamesVsValues.view.map(e => Vector(e._1, e._2)).transpose match {
+        case columnNames :: columnValues :: Nil =>
+          s"INSERT INTO ${namespace}(${columnNames.mkString(",")}) VALUES(${columnValues.mkString(",")})"
+      }
+      SinkQuery(query)
     }
   }
 
