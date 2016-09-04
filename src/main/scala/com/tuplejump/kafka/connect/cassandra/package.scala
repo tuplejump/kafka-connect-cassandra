@@ -86,7 +86,8 @@ package object cassandra {
     def convert(schema: Schema, result: Struct, col: String): AnyRef =
       schema.field(col).schema match {
         case x if x.`type`() == Schema.STRING_SCHEMA.`type`() =>
-          s"'${result.get(col).toString}'"
+          val fieldValue = result.get(col)
+          if(fieldValue != null) s"'${fieldValue.toString}'" else "null"
         case x if x.name() == Timestamp.LOGICAL_NAME =>
           val time = Timestamp.fromLogical(x, result.get(col).asInstanceOf[JDate])
           s"$time"
