@@ -64,6 +64,31 @@ class SchemaSpec extends AbstractFlatSpec {
     query.cql should be("INSERT INTO keyspacex.tablex(available,name,age) VALUES(false,'user',15)")
   }
 
+  it should "convert a struct schema with multiple fields including nullable string field" in {
+    val topic = "test_kfk"
+    val sc = sinkConfig(topic, "keyspacex", "tablex", List("available", "name", "type", "age"))
+
+    val nullableStringSchema = SchemaBuilder.string().optional().build()
+
+    val schema = SchemaBuilder.struct.name("record").version(1)
+      .field("available", Schema.BOOLEAN_SCHEMA)
+      .field("name", Schema.STRING_SCHEMA)
+      .field("type", nullableStringSchema)
+      .field("age", Schema.INT32_SCHEMA).build
+
+    val value = new Struct(schema).put("name", "user").put("available", false).put("age", 15).put("type", null)
+    val record = new SinkRecord("test_kfk", 1, SchemaBuilder.struct.build, "key", schema, value, 0)
+
+    schema.asColumnNames should be (sc.schema.columnNames)
+
+    sc.schema.route.topic should be (record.topic)
+    sc.schema is record should be (true)
+
+    sc.query.cql should be ("INSERT INTO keyspacex.tablex(available,name,type,age) VALUES(?,?,?,?)")
+    val query = record.as(sc.schema.namespace)
+    query.cql should be("INSERT INTO keyspacex.tablex(available,name,type,age) VALUES(false,'user',null,15)")
+  }
+
   it should "convert cassandra column defs to a source schema" in {
     val colDef = Map(
       "id" -> DataType.cint(),
